@@ -1,5 +1,8 @@
 # Dice Roller — Plan de migración desde *Lanzador Dado Legendario*
 
+> La historia del desarrollo (problemas, soluciones y cómo surgió cada feature) está en
+> [BITACORA_DE_DESARROLLO.md](BITACORA_DE_DESARROLLO.md).
+
 > Documento vivo. Describe qué se toma del proyecto anterior (`../Lanzador-Dado-Legendario`),
 > qué se reemplaza por librerías, qué es nuevo y **por qué** se eligió cada recurso.
 

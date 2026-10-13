@@ -11,8 +11,10 @@ import kotlin.math.abs
 /** Cómo se dibuja una pieza: el patrón que se le pinta encima a cada cara. */
 enum class Acabado {
     LISO,
-    /** Ladrillos en hilera (madera grabada, como la torre de madera). */
+    /** Ladrillos en hilera. */
     LADRILLO,
+    /** Tablones de madera con veta, trabados (taberna). */
+    TABLONES,
     /** Piedras irregulares con variación de tono (castillo). */
     PIEDRA,
     /** Cuero con costura de color en el borde de cada cara. */
@@ -33,7 +35,52 @@ data class PiezaVisible(
     val colorDetalle: Long = 0xFF000000L,
     /** Si no es nulo, las caras que miran hacia [puntoInterior] se pintan de este color (forro). */
     val colorInterior: Long? = null,
-    val puntoInterior: Vec3? = null
+    val puntoInterior: Vec3? = null,
+    /** Aberturas (ventanas, puerta) en la cara que mira hacia [haciaAfuera]. */
+    val aberturas: List<Abertura> = emptyList(),
+    val haciaAfuera: Vec3 = Vec3(0f, 0f, 1f),
+    /** Si no es nulo, algunas piedras llevan musgo de este color (más cerca del suelo). */
+    val colorMusgo: Long? = null
+)
+
+/**
+ * Hueco en la cara de una pieza por donde se ven caer los dados. Coordenadas de la cara:
+ * `u` horizontal (cm desde el centro de la cara, hacia la derecha mirándola de frente) e `y` la
+ * altura del mundo.
+ */
+sealed class Abertura {
+    /**
+     * Ventana con arco ([arco] = alto del arco; [apuntado] = gótico) y, si [parteluz], cruz de madera.
+     * Con [ribete], el borde lleva una tira de cuero de ese color con doble pespunte [costura].
+     */
+    data class Ventana(val u0: Float, val u1: Float, val y0: Float, val y1: Float, val arco: Float,
+                       val apuntado: Boolean = false, val parteluz: Boolean = false,
+                       val ribete: Long? = null, val costura: Long? = null) : Abertura()
+
+    /** Puerta en arco medida en X del mundo (abarca varias caras de una torre redonda). */
+    data class Puerta(val x0: Float, val x1: Float, val yArranque: Float, val arco: Float) : Abertura()
+}
+
+/** Luz puntual del ambiente; si [visible], se dibuja la llama (vela, antorcha). */
+data class LuzPuntual(val posicion: Vec3, val color: Long, val alcance: Float, val intensidad: Float, val visible: Boolean = false)
+
+/** Resplandor de fondo en coordenadas de pantalla (fracciones del lienzo). */
+data class Resplandor(val x: Float, val y: Float, val radio: Float, val color: Long)
+
+/**
+ * Iluminación y atmósfera de una torre. Los colores de [ambiente] y [luzPrincipal] multiplican al
+ * color de cada superficie; las [luces] suman su color con la distancia. La [niebla] aclara lo alto.
+ */
+data class Ambiente(
+    val fondoArriba: Long,
+    val fondoAbajo: Long,
+    val ambiente: Long,
+    val luzPrincipal: Long,
+    val luces: List<LuzPuntual> = emptyList(),
+    val resplandores: List<Resplandor> = emptyList(),
+    val niebla: Long? = null,
+    /** Brillo tenue que se ve a través de las aberturas (luz del interior). */
+    val brilloAberturas: Long = 0x00000000L
 )
 
 /**
@@ -58,7 +105,12 @@ class ModeloTorre(
     /** Rectángulo (x0, z0, x1, z1) justo frente a la salida (donde se forma la cola de dados). */
     val zonaBoca: FloatArray,
     /** Rectángulo (x0, z0, x1, z1) de la bandeja donde se muestran los dados antes de lanzar. */
-    val zonaBandeja: FloatArray
+    val zonaBandeja: FloatArray,
+    val ambiente: Ambiente = Ambiente(0xFF101820L, 0xFF060A10L, 0xFF737373L, 0xFF8C8C8CL),
+    /** Rectángulo (x0, z0, x1, z1) del piso de la bandeja y su acabado. */
+    val piso: FloatArray = zonaTorre,
+    val acabadoPiso: Acabado = Acabado.LISO,
+    val detallePiso: Long = 0xFF000000L
 ) {
     fun escenarioFisico() = EscenarioFisico(
         piezas = piezas.filter { it.colisiona }.map { it.pieza },

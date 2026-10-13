@@ -189,7 +189,10 @@ Cómo funciona:
 * Al lanzar, los dados se **sueltan por la boca de la torre** en capas (3 × 2 por capa, cada capa
   más alta), bajan rebotando por las rampas y salen por la abertura del frente a la bandeja.
   Con torre, el deslizamiento del dedo sólo dispara el lanzamiento.
-* La pared frontal se dibuja **en corte** (casi transparente) para ver la caída.
+* Cada torre tiene su **ambiente** (luz de vela en la taberna, antorchas violetas y niebla en el
+  castillo, luces violeta y turquesa en el cuero) y el frente **cerrado con aberturas** por donde se
+  ve caer a los dados en parte: ventanas con parteluz (madera), puerta en arco, ventanas góticas y
+  troneras (castillo) y una ventana de medio punto con ribete de cuero y doble pespunte dorado (cuero). La física no cambia.
 * Funciona con **los dos modos** de decisión: en el predeterminado la caída completa por la torre
   se pre-simula y se reproduce con las rotaciones de simetría.
 * **Garantía extra**: si un dado queda quieto dentro de la torre, la torre recibe golpecitos. Si aun

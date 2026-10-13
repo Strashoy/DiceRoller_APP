@@ -179,7 +179,7 @@ fun MesaDados3D(
                 camara.ajustar(general, size.width, size.height, margen = 6f)
             }
             if (escena != null) {
-                dibujarConTorre(escena, camara, piso, dibujo, destacados, pintor)
+                dibujarConTorre(escena, camara, dibujo, destacados, pintor, vineta = 1f - t)
                 return@Canvas
             }
             dibujarBandeja(camara, mx, mz, material)
@@ -266,14 +266,10 @@ private fun DrawScope.dibujarBandeja(camara: Camara, mx: Float, mz: Float, mater
  * baldosas de la torre y dados juntos, ordenados por profundidad (algoritmo del pintor).
  */
 private fun DrawScope.dibujarConTorre(
-    escena: EscenaTorre, camara: Camara, piso: List<Vec3>,
-    dados: List<DadoVisual>, destacados: Set<Int>, pintor: PintorDados
+    escena: EscenaTorre, camara: Camara,
+    dados: List<DadoVisual>, destacados: Set<Int>, pintor: PintorDados, vineta: Float
 ) {
-    val pts = piso.map { camara.proyectar(it) }
-    drawPath(
-        Path().apply { moveTo(pts[0].x, pts[0].y); pts.drop(1).forEach { lineTo(it.x, it.y) }; close() },
-        Color(escena.modelo.colorPiso)
-    )
+    escena.dibujarFondoYPiso(this, camara)
     dados.forEach { pintor.dibujarSombra(this, camara, it) }
     val lista = escena.dibujables(camara) + dados.map { d ->
         // Un poco hacia la cámara: un dado apoyado se dibuja después de la baldosa sobre la que está.
@@ -282,4 +278,5 @@ private fun DrawScope.dibujarConTorre(
         }
     }
     lista.sortedByDescending { it.profundidad }.forEach { it.dibujar(this) }
+    escena.dibujarVineta(this, vineta)
 }
