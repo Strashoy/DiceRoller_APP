@@ -40,7 +40,9 @@ data class DadoVisual(
     val dado: DadoEnMesa,
     val posicion: Vec3,
     val orientacion: Quat,
-    val enReposo: Boolean
+    val enReposo: Boolean,
+    /** Normal de lo que lo sostiene: la cara de arriba se lee respecto de ella (ver LectorCara). */
+    val apoyo: Vec3 = Vec3.ARRIBA
 )
 
 class FrameMesa(val dados: List<DadoVisual>, val eventos: List<EventoColision>)

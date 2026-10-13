@@ -37,7 +37,7 @@ class TorreTest {
                     peorSolape = maxOf(peorSolape, motor.solapamientoMaximo())
                     adentro += sim.estados().count { modelo.escenarioFisico().dentroDeTorre(it.posicion) }
                     sim.estados().forEach { e ->
-                        assertTrue("$id n=$n montado", !LectorCara.leer(e.dado.tipo, e.orientacion).estaMontado(SimulacionTirada.ALINEACION_MINIMA))
+                        assertTrue("$id n=$n montado", !LectorCara.leer(e.dado.tipo, e.orientacion, e.apoyo).estaMontado(SimulacionTirada.ALINEACION_MINIMA))
                     }
                 }
                 println("$id n=$n: media ${"%.2f".format(tiempo / 10)} s, máx ${"%.2f".format(maximo)} s, empujones $empujones, golpecitos $golpecitos, forzados $forzados, adentro $adentro, solape $peorSolape")
@@ -57,7 +57,7 @@ class TorreTest {
             val sim = SimulacionTirada(dados, GeneradorLanzamiento.impulsosTorre(dados, modelo, Random(1)), emptyList(), m, 1, escenario = modelo.escenarioFisico())
             val sesion = SesionResultadoPredeterminado(dados, PreSimulador.grabar(sim), deseados, random)
             while (!sesion.terminada) sesion.avanzar(1f / 60f)
-            sesion.estadoFinal().forEach { assertEquals(deseados[it.dado.id], LectorCara.leer(it.dado.tipo, it.orientacion).valor) }
+            sesion.estadoFinal().forEach { assertEquals(deseados[it.dado.id], LectorCara.leer(it.dado.tipo, it.orientacion, it.apoyo).valor) }
         }
     }
 }

@@ -68,7 +68,9 @@ data class EstadoCuerpo(
     val dado: DadoEnMesa,
     val posicion: Vec3,
     val orientacion: Quat,
-    val enReposo: Boolean
+    val enReposo: Boolean,
+    /** Normal de la superficie que lo sostiene (piso, rampa o cara de otro dado). */
+    val apoyo: Vec3 = Vec3.ARRIBA
 )
 
 /** Condiciones iniciales de un dado al soltarlo (cm, cm/s, rad/s). */
@@ -112,6 +114,12 @@ interface MotorFisicaDados {
 
     /** Último recurso: apoya el dado con la orientación dada y lo duerme. */
     fun forzarReposo(idDado: Int, orientacion: Quat)
+
+    /**
+     * Acomoda el dado EN SU LUGAR con esa orientación (girándolo sobre su apoyo, sin moverlo de
+     * sitio) y lo deja asentarse solo. Es lo que haría un jugador al enderezar un dado montado.
+     */
+    fun asentarEnSitio(idDado: Int, orientacion: Quat) = forzarReposo(idDado, orientacion)
 
     /** Agrega piezas fijas (torre de dados). Se llama después de [prepararMesa]. */
     fun agregarEscenario(escenario: EscenarioFisico) {}

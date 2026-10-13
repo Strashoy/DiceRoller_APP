@@ -1,5 +1,8 @@
 package com.rolesencia.diceroller.ui.mesa3d
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -41,6 +44,10 @@ import kotlinx.coroutines.isActive
 import kotlin.math.hypot
 
 private const val ALTO_PARED = 3.5f
+/** Altura de la cámara cenital del resultado (cm). */
+private const val ALTO_CENITAL = 40f
+/** Medio lado mínimo del encuadre del resultado: un solo dado no ocupa toda la pantalla. */
+private const val MEDIO_ENCUADRE_MINIMO = 4.5f
 
 /**
  * Bandeja 3D. Es "tonta" a propósito: no sabe de modos ni de reglas.
@@ -73,6 +80,21 @@ fun MesaDados3D(
 
     LaunchedEffect(dadosQuietos, sesion) { if (sesion == null) dibujo = dadosQuietos }
 
+    // Vista del resultado: al terminar la tirada la cámara pasa a cenital y se acerca a los dados.
+    // Vuelve a la vista general en cuanto empieza otra tirada o cambian los dados de la mesa.
+    val vistaResultado = remember { Animatable(0f) }
+    var idsResultado by remember { mutableStateOf<Set<Int>?>(null) }
+    val enResultado = sesion == null && !preparando && idsResultado != null &&
+        dadosQuietos.isNotEmpty() && dadosQuietos.map { it.dado.id }.toSet() == idsResultado
+    // Con el resultado en pantalla, un toque alterna entre la vista cenital y la general (torre).
+    var verGeneral by remember { mutableStateOf(false) }
+    val cenital = enResultado && !verGeneral
+    val alternarVista by rememberUpdatedState { if (enResultado) verGeneral = !verGeneral }
+    LaunchedEffect(cenital) {
+        if (cenital) vistaResultado.animateTo(1f, tween(1100, easing = FastOutSlowInEasing))
+        else vistaResultado.animateTo(0f, tween(500, easing = FastOutSlowInEasing))
+    }
+
     // Bucle de animación: un paso de sesión por cuadro de pantalla (vsync).
     LaunchedEffect(sesion) {
         val actual = sesion ?: return@LaunchedEffect
@@ -85,7 +107,11 @@ fun MesaDados3D(
                 cuadro(frame, ahora)
             }
         }
-        if (isActive) terminada(actual)
+        if (isActive) {
+            idsResultado = dibujo.map { it.dado.id }.toSet()
+            verGeneral = false
+            terminada(actual)
+        }
     }
 
     val lanzarConGesto by rememberUpdatedState(onGesto)
@@ -103,6 +129,7 @@ fun MesaDados3D(
                         val inicio = awaitFirstDown(requireUnconsumed = false)
                         val rastreador = VelocityTracker()
                         var ultima = inicio.position
+                        var ultimoTiempo = inicio.uptimeMillis
                         rastreador.addPosition(inicio.uptimeMillis, inicio.position)
                         inicio.consume()
                         while (true) {
@@ -110,6 +137,7 @@ fun MesaDados3D(
                             val cambio = evento.changes.firstOrNull { it.id == inicio.id } ?: break
                             rastreador.addPosition(cambio.uptimeMillis, cambio.position)
                             ultima = cambio.position
+                            ultimoTiempo = cambio.uptimeMillis
                             cambio.consume()
                             if (!cambio.pressed) break
                         }
@@ -119,22 +147,41 @@ fun MesaDados3D(
                         // Un toque o un roce corto no lanza: hace falta un deslizamiento decidido.
                         if (habilitado && rapidez > 800f && recorrido > 80.dp.toPx()) {
                             lanzarConGesto(Gesto(v.x, v.y, (rapidez / 4000f).coerceIn(0.15f, 1f)))
+                        } else if (recorrido < 24.dp.toPx() && ultimoTiempo - inicio.uptimeMillis < 400) {
+                            alternarVista()
                         }
                     }
                 }
         ) {
             val mx = mesa.ancho / 2f
             val mz = mesa.profundidad / 2f
+            val t = vistaResultado.value
+            val piso = listOf(Vec3(-mx, 0f, -mz), Vec3(mx, 0f, -mz), Vec3(mx, 0f, mz), Vec3(-mx, 0f, mz))
+            val general = if (escena != null) escena.vertices + piso else listOf(
+                Vec3(-mx, ALTO_PARED, -mz), Vec3(mx, ALTO_PARED, -mz), Vec3(-mx, 0f, mz), Vec3(mx, 0f, mz),
+                Vec3(-mx, ALTO_PARED, mz), Vec3(mx, ALTO_PARED, mz)
+            )
+            val ojoGeneral = if (escena != null) Vec3(0f, 30f, mz + 26f) else Vec3(0f, 40f, mesa.profundidad * 0.6f)
+            val miraGeneral = if (escena != null) Vec3(0f, 8f, -mz * 0.3f) else Vec3(0f, 0f, 1f)
+            val camara: Camara
+            if (t > 0f && dibujo.isNotEmpty()) {
+                val resultado = encuadreResultado(dibujo, size.height / size.width, mx, mz)
+                val centro = Vec3(
+                    resultado.sumOf { it.x.toDouble() }.toFloat() / resultado.size, 0f,
+                    resultado.sumOf { it.z.toDouble() }.toFloat() / resultado.size
+                )
+                // Casi cenital: una pizca de inclinación conserva "arriba" de la pantalla = fondo de la mesa.
+                val ojoCenital = centro + Vec3(0f, ALTO_CENITAL, 0.4f)
+                camara = Camara(mezcla(ojoGeneral, ojoCenital, t), mezcla(miraGeneral, centro, t))
+                camara.ajustarEntre(general, 6f, resultado, 0f, size.width, size.height, t)
+            } else {
+                camara = Camara(ojoGeneral, miraGeneral)
+                camara.ajustar(general, size.width, size.height, margen = 6f)
+            }
             if (escena != null) {
-                dibujarConTorre(escena, camara = Camara(Vec3(0f, 30f, mz + 26f), Vec3(0f, 8f, -mz * 0.3f)), mx, mz, dibujo, destacados, pintor)
+                dibujarConTorre(escena, camara, piso, dibujo, destacados, pintor)
                 return@Canvas
             }
-            val camara = Camara(Vec3(0f, 40f, mesa.profundidad * 0.6f), Vec3(0f, 0f, 1f))
-            camara.ajustar(
-                listOf(Vec3(-mx, ALTO_PARED, -mz), Vec3(mx, ALTO_PARED, -mz), Vec3(-mx, 0f, mz), Vec3(mx, 0f, mz),
-                    Vec3(-mx, ALTO_PARED, mz), Vec3(mx, ALTO_PARED, mz)),
-                size.width, size.height, margen = 6f
-            )
             dibujarBandeja(camara, mx, mz, material)
             val ordenados = dibujo.sortedByDescending { camara.profundidad(it.posicion) }
             ordenados.forEach { pintor.dibujarSombra(this, camara, it) }
@@ -148,6 +195,34 @@ fun MesaDados3D(
             )
         }
     }
+}
+
+private fun mezcla(a: Vec3, b: Vec3, t: Float) = a + (b - a) * t
+
+/**
+ * Rectángulo del piso que encuadra el resultado: encierra a los dados (con un tamaño mínimo), tiene
+ * la proporción del lienzo ([proporcion] = alto / ancho) y no se sale del piso (medio ancho [mx],
+ * media profundidad [mz]) para que nunca se vea el vacío alrededor de la mesa.
+ */
+private fun encuadreResultado(dados: List<DadoVisual>, proporcion: Float, mx: Float, mz: Float): List<Vec3> {
+    var x0 = Float.MAX_VALUE
+    var x1 = -Float.MAX_VALUE
+    var z0 = Float.MAX_VALUE
+    var z1 = -Float.MAX_VALUE
+    for (d in dados) {
+        val r = Poliedros.de(d.dado.tipo).radio
+        x0 = minOf(x0, d.posicion.x - r)
+        x1 = maxOf(x1, d.posicion.x + r)
+        z0 = minOf(z0, d.posicion.z - r)
+        z1 = maxOf(z1, d.posicion.z + r)
+    }
+    var hx = maxOf((x1 - x0) / 2f + 1f, MEDIO_ENCUADRE_MINIMO)
+    var hz = maxOf((z1 - z0) / 2f + 1f, MEDIO_ENCUADRE_MINIMO)
+    if (hz < hx * proporcion) hz = hx * proporcion else hx = hz / proporcion
+    fun dentro(c: Float, h: Float, m: Float) = if (h >= m) 0f else c.coerceIn(-m + h, m - h)
+    val cx = dentro((x0 + x1) / 2f, hx, mx)
+    val cz = dentro((z0 + z1) / 2f, hz, mz)
+    return listOf(Vec3(cx - hx, 0f, cz - hz), Vec3(cx + hx, 0f, cz - hz), Vec3(cx - hx, 0f, cz + hz), Vec3(cx + hx, 0f, cz + hz))
 }
 
 private fun DrawScope.dibujarBandeja(camara: Camara, mx: Float, mz: Float, material: MaterialMesa) {
@@ -191,11 +266,9 @@ private fun DrawScope.dibujarBandeja(camara: Camara, mx: Float, mz: Float, mater
  * baldosas de la torre y dados juntos, ordenados por profundidad (algoritmo del pintor).
  */
 private fun DrawScope.dibujarConTorre(
-    escena: EscenaTorre, camara: Camara, mx: Float, mz: Float,
+    escena: EscenaTorre, camara: Camara, piso: List<Vec3>,
     dados: List<DadoVisual>, destacados: Set<Int>, pintor: PintorDados
 ) {
-    val piso = listOf(Vec3(-mx, 0f, -mz), Vec3(mx, 0f, -mz), Vec3(mx, 0f, mz), Vec3(-mx, 0f, mz))
-    camara.ajustar(escena.vertices + piso, size.width, size.height, margen = 6f)
     val pts = piso.map { camara.proyectar(it) }
     drawPath(
         Path().apply { moveTo(pts[0].x, pts[0].y); pts.drop(1).forEach { lineTo(it.x, it.y) }; close() },

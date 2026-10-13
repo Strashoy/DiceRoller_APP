@@ -196,8 +196,9 @@ class DiceRollerViewModel(
     }
 
     // --- SKINS ---
+    /** Elegir una skin a mano gana sobre las del sistema de juego (si no, el dado no saldría con ella). */
     fun seleccionarSkin(skin: SkinDado) {
-        _uiState.update { it.copy(skinActual = skin) }
+        _uiState.update { it.copy(skinActual = skin, skinsDelSistema = false) }
         guardar()
     }
 

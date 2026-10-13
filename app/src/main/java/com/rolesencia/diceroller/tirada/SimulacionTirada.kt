@@ -11,8 +11,8 @@ import com.rolesencia.diceroller.fisica.LectorCara
 import com.rolesencia.diceroller.fisica.MotorFisicaDados
 import com.rolesencia.diceroller.fisica.Quat
 import com.rolesencia.diceroller.fisica.Vec3
+import com.rolesencia.diceroller.fisica.motor.APOYO_MINIMO
 import com.rolesencia.diceroller.fisica.motor.MotorFisicoPropio
-import kotlin.random.Random
 
 /**
  * Una tirada física con **garantía de resultado**: pase lo que pase, termina con cada dado bien
@@ -21,19 +21,23 @@ import kotlin.random.Random
  * Garantías:
  *  1. **Contención**: piso, 4 paredes y techo; si un dado atravesara algo, el motor lo devuelve al centro.
  *  2. **Reposo**: se espera a que TODOS los dados "duerman" (quietos un cuarto de segundo).
- *  3. **Dados montados**: si un dado quedó inclinado sobre otro o contra la pared
- *     ([LecturaCara.estaMontado]) se hace lo que manda la mesa: se lo levanta y se lo **vuelve a
- *     tirar en el lugar más libre de la bandeja** (hasta [MAX_EMPUJONES] veces). No cae otra vez
- *     sobre la misma pila. Si aun así persiste, se lo apoya sobre la cara más cercana.
- *  4. **Dados que tiemblan**: si unos pocos dados siguen despiertos sin cambios durante
- *     [ESPERA_TEMBLOR] s (p. ej. uno balanceándose sobre la arista de otro), se los empuja.
+ *  3. **Lectura respecto del apoyo**: la cara de arriba se lee respecto de la superficie que
+ *     sostiene al dado ([EstadoCuerpo.apoyo]), no de la vertical. Un dado apoyado plano sobre una
+ *     rampa o sobre la cara de otro dado es válido: muestra la cara paralela a esa superficie.
+ *  4. **Dados montados** (apoyados sobre una arista o un vértice, [LecturaCara.estaMontado]):
+ *     se les da un **empujoncito en el lugar** (hasta
+ *     [MAX_EMPUJONES] veces). Si aun así persisten, se los **acomoda donde están** sobre la cara
+ *     más cercana ([MotorFisicaDados.asentarEnSitio]). Nunca aparecen en otro lado del tablero.
+ *     Si unos pocos dados siguen despiertos sin cambios durante [ESPERA_TEMBLOR] s
+ *     (p. ej. uno balanceándose sobre la arista de otro), se los trata igual.
  *  5. **Límite de tiempo**: a los [limiteSegundos] de simulación se apoya todo lo que siga moviéndose.
  *  6. **Sin superposiciones**: el motor separa a cada paso los dados que se interpenetran (SAT);
  *     antes de dar la tirada por terminada se verifica que ningún par quede superpuesto.
  *  7. **Torre de dados**: los dados se vierten de a uno (cada uno con su [ImpulsoLanzamiento.retardo]).
  *     Si un dado se queda quieto dentro de la torre o en la boca, se le da un **golpecito a la torre**
  *     enseguida (como hace un jugador), sin esperar a que el resto termine. Si aun así sigue trabado
- *     al final, se empuja como uno montado y, en último caso, se lo saca a la bandeja.
+ *     tras [MAX_GOLPECITOS] golpecitos, vale lo mismo que en la bandeja: si está plano sobre su
+ *     rampa se lee así; si no, se lo acomoda en el lugar.
  *
  * Las garantías 3 y 4 se cuentan en las métricas: en una mesa normal deberían ser casi siempre 0.
  */
@@ -54,6 +58,8 @@ class SimulacionTirada(
         const val MAX_EMPUJONES = 3
         const val ALINEACION_MINIMA = 0.95f
         const val ESPERA_TEMBLOR = 1.5f
+        /** Con más dados que esto moviéndose, la tirada todavía no se "trabó": se espera. */
+        const val MAX_TEMBLANDO = 5
         /** Cuánto espera un dado quieto dentro de la torre antes del golpecito. */
         const val ESPERA_GOLPECITO = 0.3f
         const val MAX_GOLPECITOS = 15
@@ -82,7 +88,7 @@ class SimulacionTirada(
     var terminada = false
         private set
 
-    private var despiertosAnteriores: Set<Int> = emptySet()
+    private var menosDespiertos = Int.MAX_VALUE
     private var desdeCambioDespiertos = 0f
 
     /** Dados que todavía no entraron (se vierten de a uno). */
@@ -131,69 +137,42 @@ class SimulacionTirada(
     /** Sólo de los dados de esta tirada (no de los obstáculos de rondas anteriores). */
     fun lecturas(): Map<Int, LecturaCara> = motor.estados()
         .filter { it.dado.id in idsPropios }
-        .associate { it.dado.id to LectorCara.leer(it.dado.tipo, it.orientacion) }
+        .associate { it.dado.id to leer(it) }
+
+    /** Lee la cara de arriba respecto de lo que sostiene al dado (si es razonablemente horizontal). */
+    private fun leer(estado: EstadoCuerpo): LecturaCara =
+        LectorCara.leer(estado.dado.tipo, estado.orientacion, apoyoDe(estado))
+
+    private fun apoyoDe(estado: EstadoCuerpo): Vec3 =
+        if (estado.apoyo.y >= APOYO_MINIMO) estado.apoyo else Vec3.ARRIBA
+
+    /** Mal apoyado: sobre una arista o un vértice en vez de una cara. */
+    private fun malApoyado(estado: EstadoCuerpo): Boolean = leer(estado).estaMontado(ALINEACION_MINIMA)
+
+    /** Empujoncito en el lugar; si ya se probó varias veces, se lo acomoda donde está. */
+    private fun corregir(estado: EstadoCuerpo) {
+        val intentos = empujonesPorDado.merge(estado.dado.id, 1, Int::plus)!!
+        if (intentos <= MAX_EMPUJONES) {
+            motor.empujar(estado.dado.id)
+            empujones++
+        } else {
+            motor.asentarEnSitio(estado.dado.id, apoyada(estado))
+            forzados++
+        }
+    }
 
     private fun verificarLecturas() {
         if (motor.solapamientoMaximo() > SOLAPAMIENTO_TOLERADO) {
             separados += motor.resolverSolapamientos()
             return
         }
-        var hayMontados = false
-        for (estado in motor.estados()) {
-            if (estado.dado.id !in idsPropios) continue
-            // Un dado quieto dentro de la torre (trabado en una rampa) cuenta como mal apoyado.
-            val trabado = escenario?.dentroDeTorre(estado.posicion) == true
-            if (!trabado && !LectorCara.leer(estado.dado.tipo, estado.orientacion).estaMontado(ALINEACION_MINIMA)) continue
-            hayMontados = true
-            val intentos = empujonesPorDado.merge(estado.dado.id, 1, Int::plus)!!
-            if (intentos <= MAX_EMPUJONES) {
-                relanzarEnLugarLibre(estado.dado.id)
-                empujones++
-            } else {
-                motor.forzarReposo(estado.dado.id, apoyada(estado))
-                forzados++
-            }
-        }
-        if (!hayMontados) terminada = true
-    }
-
-    /** Bandeja libre donde se relanzan los dados montados (la de la torre, o la mesa con margen). */
-    private val zonaLibre: FloatArray = escenario?.zonaBandeja
-        ?: floatArrayOf(-mesa.ancho / 2f + 2f, -mesa.profundidad / 2f + 2f, mesa.ancho / 2f - 2f, mesa.profundidad / 2f - 2f)
-    private val azar = Random(semilla xor 0x5EEDL)
-
-    /**
-     * Relanza un dado montado como en la mesa real: se lo levanta y se lo deja caer, girando, sobre
-     * el punto de la bandeja más alejado de los demás dados. Así no vuelve a caer sobre la pila.
-     */
-    private fun relanzarEnLugarLibre(id: Int) {
-        val otros = motor.estados().filter { it.dado.id != id }.map { it.posicion }
-        var mejor = Vec3((zonaLibre[0] + zonaLibre[2]) / 2f, 0f, (zonaLibre[1] + zonaLibre[3]) / 2f)
-        var mejorDistancia = -1f
-        var x = zonaLibre[0]
-        while (x <= zonaLibre[2]) {
-            var z = zonaLibre[1]
-            while (z <= zonaLibre[3]) {
-                val distancia = otros.minOfOrNull { (it.x - x) * (it.x - x) + (it.z - z) * (it.z - z) } ?: Float.MAX_VALUE
-                val conAzar = distancia + azar.nextFloat() * 0.5f
-                if (conAzar > mejorDistancia) {
-                    mejorDistancia = conAzar
-                    mejor = Vec3(x, 0f, z)
-                }
-                z += 1.5f
-            }
-            x += 1.5f
-        }
-        fun ruido(e: Float) = (azar.nextFloat() - 0.5f) * 2f * e
-        motor.relanzar(
-            id,
-            ImpulsoLanzamiento(
-                posicion = Vec3(mejor.x, 5f, mejor.z),
-                orientacion = GeneradorLanzamiento.orientacionAleatoria(azar),
-                velocidadLineal = Vec3(ruido(12f), -20f, ruido(12f)),
-                velocidadAngular = Vec3(ruido(25f), ruido(25f), ruido(25f))
-            )
-        )
+        val propios = motor.estados().filter { it.dado.id in idsPropios }
+        // Dentro de la torre primero se golpea la torre (lo que haría un jugador), y recién después
+        // se aceptan los que quedaron planos sobre su rampa.
+        if (escenario != null && golpecitos < MAX_GOLPECITOS && propios.any { escenario.dentroDeTorre(it.posicion) }) return
+        val mal = propios.filter { malApoyado(it) }
+        mal.forEach { corregir(it) }
+        if (mal.isEmpty()) terminada = true
     }
 
     /**
@@ -221,48 +200,47 @@ class SimulacionTirada(
         }
     }
 
+    /**
+     * Si pasan [ESPERA_TEMBLOR] s sin que ningún dado nuevo se duerma (unos pocos se zarandean entre
+     * sí en un montón), los que ya están planos sobre su apoyo se asientan ahí mismo (es un ajuste
+     * imperceptible) y los montados reciben su empujoncito.
+     */
     private fun vigilarTemblores() {
-        val despiertos = motor.estados().filter { !it.enReposo && it.dado.id in idsPropios }.map { it.dado.id }.toSet()
-        if (despiertos != despiertosAnteriores) {
-            despiertosAnteriores = despiertos
+        val despiertos = motor.estados().filter { !it.enReposo && it.dado.id in idsPropios }
+        if (despiertos.size < menosDespiertos) {
+            menosDespiertos = despiertos.size
             desdeCambioDespiertos = 0f
             return
         }
         desdeCambioDespiertos += SUBPASO
-        if (desdeCambioDespiertos < ESPERA_TEMBLOR || despiertos.size > 3) return
+        if (desdeCambioDespiertos < ESPERA_TEMBLOR || despiertos.size > MAX_TEMBLANDO) return
         desdeCambioDespiertos = 0f
-        for (id in despiertos) {
-            val intentos = empujonesPorDado.merge(id, 1, Int::plus)!!
-            if (intentos <= MAX_EMPUJONES) {
-                relanzarEnLugarLibre(id)
-                empujones++
-            } else {
-                val estado = motor.estados().first { it.dado.id == id }
-                motor.forzarReposo(id, apoyada(estado))
-                forzados++
-            }
+        menosDespiertos = Int.MAX_VALUE
+        for (estado in despiertos) {
+            if (malApoyado(estado)) corregir(estado) else motor.asentarEnSitio(estado.dado.id, apoyada(estado))
         }
     }
 
     private fun apoyarTodo() {
         for (estado in motor.estados()) {
             if (estado.dado.id !in idsPropios) continue
-            val lectura = LectorCara.leer(estado.dado.tipo, estado.orientacion)
-            if (!estado.enReposo || lectura.estaMontado(ALINEACION_MINIMA) || escenario?.dentroDeTorre(estado.posicion) == true) {
-                motor.forzarReposo(estado.dado.id, apoyada(estado))
+            if (!estado.enReposo || malApoyado(estado)) {
+                motor.asentarEnSitio(estado.dado.id, apoyada(estado))
                 forzados++
             }
         }
-        if (motor.solapamientoMaximo() > SOLAPAMIENTO_TOLERADO) separados += motor.resolverSolapamientos()
+        var vueltas = 0
+        while (motor.solapamientoMaximo() > SOLAPAMIENTO_TOLERADO && vueltas++ < 5) separados += motor.resolverSolapamientos()
         terminada = true
     }
 
-    /** Gira el dado lo mínimo para que la cara más cercana quede perfectamente horizontal. */
+    /** Gira el dado lo mínimo para que la cara más cercana quede paralela a su apoyo. */
     private fun apoyada(estado: EstadoCuerpo): Quat {
         val tipo = estado.dado.tipo
-        val lectura = LectorCara.leer(tipo, estado.orientacion)
+        val arriba = apoyoDe(estado)
+        val lectura = LectorCara.leer(tipo, estado.orientacion, arriba)
         val normalMundo = estado.orientacion.rotar(GeometriaDados.normales(tipo)[lectura.indice])
-        val destino = if (GeometriaDados.seLeeHaciaAbajo(tipo)) Vec3.ABAJO else Vec3.ARRIBA
+        val destino = if (GeometriaDados.seLeeHaciaAbajo(tipo)) -arriba else arriba
         return (Quat.entre(normalMundo, destino) * estado.orientacion).normalizado()
     }
 }

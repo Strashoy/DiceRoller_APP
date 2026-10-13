@@ -51,6 +51,9 @@ data class ConfigFisica(
 /** Un plano estático: `normal · p = d`. */
 private class Plano(val normal: Vec3, val d: Float, val superficie: Superficie, val restitucion: Float, val friccion: Float, val indice: Int)
 
+/** Pendiente máxima de un apoyo (componente vertical de su normal): 0.5 = 60°. */
+const val APOYO_MINIMO = 0.5f
+
 internal class Cuerpo(
     val dado: DadoEnMesa,
     val poli: Poliedro,
@@ -75,6 +78,8 @@ internal class Cuerpo(
     /** Velocidades promediadas: el reposo se decide con ellas, no con picos sueltos de temblor. */
     var promedioV = 0f
     var promedioW = 0f
+    /** Normal (promediada por el peso que carga cada contacto) de lo que sostiene al dado. */
+    var normalApoyo = Vec3.ARRIBA
     val verticesMundo = Array(poli.vertices.size) { Vec3.CERO }
 
     val invMasa get() = if (dormido) 0f else invMasaBase
@@ -215,7 +220,7 @@ class MotorFisicoPropio(
     }
 
     override fun estados(): List<EstadoCuerpo> =
-        cuerpos.filter { it.pieza == null }.map { EstadoCuerpo(it.dado, it.pos, it.rot, it.dormido) }
+        cuerpos.filter { it.pieza == null }.map { EstadoCuerpo(it.dado, it.pos, it.rot, it.dormido, it.normalApoyo) }
 
     override fun agregarEscenario(escenario: EscenarioFisico) {
         this.escenario = escenario
@@ -253,10 +258,18 @@ class MotorFisicoPropio(
         val c = cuerpos.firstOrNull { it.dado.id == idDado && !it.estatico } ?: return
         c.dormido = false
         c.tiempoQuieto = 0f
-        // Se lo empuja hacia arriba y lejos de los dados que lo sostienen, como haría un jugador.
-        val vecinos = contactos.mapNotNull { k -> if (k.a === c) k.b else if (k.b === c) k.a else null }.distinct()
-        val lejos = if (vecinos.isEmpty()) Vec3(ruido(1f), 0f, ruido(1f))
-        else vecinos.fold(Vec3.CERO) { acc, v -> acc + (c.pos - v.pos) }.let { Vec3(it.x, 0f, it.z) }
+        // Se lo empuja hacia arriba y lejos de los dados y paredes en que está recostado, como haría
+        // un jugador. Se buscan por cercanía: un dado dormido no tiene contactos calculados.
+        val vecinos = cuerpos.filter { o ->
+            o !== c && o.pieza == null && (o.pos - c.pos).longitud < o.poli.radio + c.poli.radio + 0.1f
+        }
+        var lejos = vecinos.fold(Vec3.CERO) { acc, v -> acc + (c.pos - v.pos).normalizado() }
+        for (pl in planos) {
+            if (pl.normal.y != 0f) continue
+            if ((pl.normal dot c.pos) - pl.d < c.poli.radio + 0.1f) lejos = lejos + pl.normal
+        }
+        lejos = Vec3(lejos.x, 0f, lejos.z)
+        if (lejos.longitud < 0.1f) lejos = Vec3(ruido(1f), 0f, ruido(1f))
         c.vel = c.vel + lejos.normalizado() * 30f + Vec3(ruido(8f), 45f, ruido(8f))
         c.omega = c.omega + Vec3(ruido(10f), ruido(10f), ruido(10f))
         for (v in vecinos) if (!v.estatico) { v.dormido = false; v.tiempoQuieto = 0f }
@@ -273,6 +286,37 @@ class MotorFisicoPropio(
         c.promedioV = 0f
         c.promedioW = 0f
         c.actualizarVertices()
+    }
+
+    override fun asentarEnSitio(idDado: Int, orientacion: Quat) {
+        val c = cuerpos.firstOrNull { it.dado.id == idDado && !it.estatico } ?: return
+        c.rot = orientacion
+        c.actualizarVertices()
+        // Al girarlo en el lugar puede meterse un poco en su apoyo o en un vecino: se lo saca por el
+        // camino más corto (la normal de cada contacto), milímetros, nunca a otro lado del tablero.
+        var vueltas = 0
+        var movido = true
+        while (movido && vueltas++ < 40) {
+            movido = false
+            for (pl in planos) {
+                val hundido = c.verticesMundo.minOf { (pl.normal dot it) - pl.d }
+                if (hundido < 0f) {
+                    c.pos = c.pos + pl.normal * (-hundido + 0.005f)
+                    c.actualizarVertices()
+                    movido = true
+                }
+            }
+            for (o in cuerpos) {
+                if (o === c || (o.pos - c.pos).longitud > o.poli.radio + c.poli.radio) continue
+                val pen = penetracion(c, o) ?: continue
+                c.pos = c.pos + pen.normal * (pen.profundidad + 0.005f)
+                c.actualizarVertices()
+                movido = true
+            }
+        }
+        c.vel = Vec3.CERO
+        c.omega = Vec3.CERO
+        c.dormido = true
     }
 
     override fun impulsar(idDado: Int, velocidad: Vec3) {
@@ -453,9 +497,8 @@ class MotorFisicoPropio(
         }
     }
 
-    /** Mueve [c] por la mesa hasta que no se superponga con ningún otro dado (lo usan los rescates). */
+    /** Mueve [c] por la mesa hasta que no se superponga con ningún otro dado (lo usan los rescates; no lo saca de la torre). */
     private fun ubicarSinSolapar(c: Cuerpo) {
-        sacarDeLaTorre(c)
         repeat(40) {
             c.actualizarVertices()
             var movido = false
@@ -560,6 +603,35 @@ class MotorFisicoPropio(
         }
         impulsosPrevios.clear()
         for (c in contactos) impulsosPrevios[c.id] = c.normal * c.accN + c.t1 * c.accT1 + c.t2 * c.accT2
+        actualizarApoyos()
+    }
+
+    /**
+     * Para cada dado despierto, la superficie sobre la que está apoyado: el piso, una rampa o la cara
+     * de otro dado. Se agrupan los contactos por "con quién" (cada grupo da una normal pesada por la
+     * carga) y, entre los que lo sostienen desde abajo, gana aquel contra el que el dado tiene una
+     * cara más pareja. Así la presión lateral de los vecinos no inclina la lectura.
+     */
+    private fun actualizarApoyos() {
+        val grupos = HashMap<Cuerpo, HashMap<Any, Vec3>>()
+        for (c in contactos) {
+            if (c.accN <= 0f) continue
+            grupos.getOrPut(c.a) { HashMap() }.merge(c.b ?: c.normal, c.normal * c.accN, Vec3::plus)
+            c.b?.let { b -> grupos.getOrPut(b) { HashMap() }.merge(c.a, -c.normal * c.accN, Vec3::plus) }
+        }
+        for ((cuerpo, porOtro) in grupos) {
+            if (cuerpo.dormido || cuerpo.estatico) continue
+            var mejor: Vec3? = null
+            var mejorAjuste = -2f
+            for (suma in porOtro.values) {
+                if (suma.longitud < 1e-4f) continue
+                val n = suma.normalizado()
+                if (n.y < APOYO_MINIMO) continue               // pared o cara empinada: no lo sostiene
+                val ajuste = cuerpo.poli.caras.maxOf { cara -> -(cuerpo.rot.rotar(cara.normal) dot n) }
+                if (ajuste > mejorAjuste) { mejorAjuste = ajuste; mejor = n }
+            }
+            mejor?.let { cuerpo.normalApoyo = it }
+        }
     }
 
     private fun idContacto(a: Cuerpo, vertice: Int, otro: Int): Long =

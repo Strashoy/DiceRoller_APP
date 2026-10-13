@@ -108,8 +108,9 @@ Las dos dependencias 3D ya están declaradas en `gradle/libs.versions.toml` y **
 4. **Ventaja/desventaja genérica (`Conservar.MAYOR/MENOR`)** — sirve para D&D, dados de
    bonificación/penalización de Cthulhu y la regla de "0 dados" de Blades.
 5. **`LectorCara` + `GeometriaDados`** — convierten la orientación final (cuaternión que devuelve
-   Jolt) en el número: se rota cada normal de cara y gana la más alineada con la vertical (el d4 se
-   lee por abajo). También detecta dados **"montados"** (apoyados en otro dado) para relanzarlos.
+   Jolt) en el número: se rota cada normal de cara y gana la más alineada con la vertical, o con la
+   normal de la superficie que lo sostiene (rampa, otro dado); el d4 se lee por abajo. También
+   detecta dados **"montados"** (sobre una arista o vértice) para empujarlos en el lugar.
    Es Kotlin puro y está testeado para todos los tipos de dado.
 6. **`MotorFisicaDados` (interfaz) + `MotorFisicoPropio`** — aísla a la app del motor concreto.
    Los eventos de contacto (`EventoColision`: impacto, roce, asentamiento) alimentan el sonido.

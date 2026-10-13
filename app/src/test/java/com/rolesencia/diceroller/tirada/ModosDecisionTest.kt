@@ -27,7 +27,7 @@ class ModosDecisionTest {
             while (!sesion.terminada && cuadros < 60 * 12) { sesion.avanzar(1f / 60f); cuadros++ }
             assertTrue("semilla $semilla no terminó", sesion.terminada)
             sesion.estadoFinal().forEach { d ->
-                val l = LectorCara.leer(d.dado.tipo, d.orientacion)
+                val l = LectorCara.leer(d.dado.tipo, d.orientacion, d.apoyo)
                 assertTrue("semilla $semilla ${d.dado.tipo.etiqueta} montado", !l.estaMontado(SimulacionTirada.ALINEACION_MINIMA))
                 assertTrue(d.posicion.y < 3f)
             }
@@ -50,7 +50,7 @@ class ModosDecisionTest {
             val sesion = SesionResultadoPredeterminado(todos, grabacion, deseados, random)
             while (!sesion.terminada) sesion.avanzar(1f / 60f)
             sesion.estadoFinal().forEach { d ->
-                assertEquals("semilla $semilla ${d.dado.tipo.etiqueta}", deseados[d.dado.id], LectorCara.leer(d.dado.tipo, d.orientacion).valor)
+                assertEquals("semilla $semilla ${d.dado.tipo.etiqueta}", deseados[d.dado.id], LectorCara.leer(d.dado.tipo, d.orientacion, d.apoyo).valor)
             }
             assertEquals(deseados, sesion.resultados().associate { it.dado.id to it.valor })
         }

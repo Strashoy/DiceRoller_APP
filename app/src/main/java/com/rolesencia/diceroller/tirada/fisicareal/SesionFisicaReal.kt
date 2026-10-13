@@ -50,7 +50,7 @@ class SesionFisicaReal(private val simulacion: SimulacionTirada) : SesionTirada 
     }
 
     override fun estadoFinal(): List<DadoVisual> =
-        simulacion.estados().map { DadoVisual(it.dado, it.posicion, it.orientacion, it.enReposo) }
+        simulacion.estados().map { DadoVisual(it.dado, it.posicion, it.orientacion, it.enReposo, it.apoyo) }
 
     override fun metricas(): MetricasSesion {
         val lecturas = simulacion.lecturas()

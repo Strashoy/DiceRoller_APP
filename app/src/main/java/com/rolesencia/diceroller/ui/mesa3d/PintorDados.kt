@@ -49,10 +49,13 @@ class PintorDados(private val simbolos: SimbolosLegendarios? = null) {
         val altura = dado.posicion.y
         val piso = Vec3(dado.posicion.x + altura * 0.25f, 0f, dado.posicion.z - altura * 0.2f)
         val centro = camara.proyectar(piso)
-        val r = camara.tamanoEnPantalla(piso, radio * (1.05f + altura * 0.04f))
+        // Vista cenital (resultado): la sombra se ve redonda y casi toda tapada por el dado.
+        val cenital = camara.cenital
+        val r = camara.tamanoEnPantalla(piso, radio * (1.05f - 0.25f * cenital + altura * 0.04f))
+        val aplastado = 0.75f + 0.25f * cenital
         val alfa = (0.45f * (1f - altura / 25f)).coerceIn(0.05f, 0.45f) *
             if (dado.dado.skin.estilo == EstiloSkin.GEMA) 0.6f else 1f
-        scope.drawOval(Color.Black.copy(alpha = alfa), topLeft = Offset(centro.x - r, centro.y - r * 0.75f), size = Size(2 * r, 1.5f * r))
+        scope.drawOval(Color.Black.copy(alpha = alfa), topLeft = Offset(centro.x - r, centro.y - r * aplastado), size = Size(2 * r, 2f * aplastado * r))
     }
 
     fun dibujarDado(scope: DrawScope, camara: Camara, dado: DadoVisual, destacado: Boolean) {
@@ -105,8 +108,11 @@ class PintorDados(private val simbolos: SimbolosLegendarios? = null) {
         val skin = dado.dado.skin
         val vista = (camara.ojo - centro).normalizado()
         val medio = (LUZ + vista).normalizado()
-        val difusa = max(0f, normal dot LUZ)
-        val luz = 0.42f + 0.58f * difusa
+        // En la toma cenital, las caras que miran arriba conservan el tono de la vista normal: se
+        // apagan los reflejos (dependen del ángulo de la cámara, y mirando a plomo aclaraban la cara
+        // hasta el gris). La luz difusa es fija al mundo y no cambia.
+        val plana = camara.cenital * max(0f, normal.y).pow(4)
+        val luz = Sombreado.luz(normal)
         val base = Color(baseLong)
         val arriba = direccionArriba(cara.vertices.map { mundo[it] }, centro)
         val derecha = (arriba cross normal).normalizado()
@@ -118,13 +124,12 @@ class PintorDados(private val simbolos: SimbolosLegendarios? = null) {
             EstiloSkin.IMAGEN -> rellenarImagen(scope, camara, skin.imagenes, i, path, centro, arriba, derecha, radioCara, base, luz)
             EstiloSkin.METALICO -> {
                 // Metal: poca luz difusa y un reflejo especular fuerte que se desliza al rodar.
-                val especular = max(0f, normal dot medio).pow(28)
-                scope.drawPath(path, lerp(lerp(Color.Black, base, 0.3f + 0.55f * difusa), Color.White, min(1f, especular * 0.95f)))
+                scope.drawPath(path, Sombreado.metal(base, normal, vista, plana))
             }
             EstiloSkin.GEMA -> {
                 scope.drawPath(path, lerp(Color.Black, base, luz).copy(alpha = 0.68f))
-                val destello = max(0f, normal dot medio).pow(40)
-                if (destello > 0.02f) scope.drawPath(path, Color.White.copy(alpha = destello * 0.55f))
+                val destello = Sombreado.destelloGema(normal, vista, plana)
+                if (destello > 0.01f) scope.drawPath(path, Color.White.copy(alpha = destello))
             }
             EstiloSkin.BRILLO_NOCTURNO -> scope.drawPath(path, lerp(Color.Black, base, 0.6f + 0.4f * luz))
             else -> scope.drawPath(path, lerp(Color.Black, base, luz))

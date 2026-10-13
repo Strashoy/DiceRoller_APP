@@ -87,7 +87,8 @@ class SesionResultadoPredeterminado(
                 e1.dado,
                 e1.posicion + (e2.posicion - e1.posicion) * f,
                 (q * s).normalizado(),
-                e2.enReposo
+                e2.enReposo,
+                e2.apoyo
             )
         }
     }

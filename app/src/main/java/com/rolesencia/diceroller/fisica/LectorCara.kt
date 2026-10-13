@@ -8,7 +8,7 @@ data class LecturaCara(
     /** Coseno entre la normal elegida y la vertical. ~1 = bien apoyado; bajo = dado "montado". */
     val alineacion: Float
 ) {
-    /** Dado apoyado contra otro dado o contra la pared: conviene relanzarlo. */
+    /** Dado apoyado sobre una arista o un vértice (no sobre una cara): conviene empujarlo. */
     fun estaMontado(umbral: Float = 0.9f): Boolean = alineacion < umbral
 }
 
@@ -18,8 +18,13 @@ data class LecturaCara(
  */
 object LectorCara {
 
-    fun leer(tipo: TipoDado, orientacion: Quat): LecturaCara {
-        val referencia = if (GeometriaDados.seLeeHaciaAbajo(tipo)) Vec3.ABAJO else Vec3.ARRIBA
+    /**
+     * Cara de arriba respecto de [arriba]: por defecto la vertical, pero puede ser la normal de la
+     * superficie que sostiene al dado (una rampa, la cara de otro dado). Un dado apoyado plano sobre
+     * una rampa muestra "arriba" la cara paralela a la rampa, como en la mesa real.
+     */
+    fun leer(tipo: TipoDado, orientacion: Quat, arriba: Vec3 = Vec3.ARRIBA): LecturaCara {
+        val referencia = if (GeometriaDados.seLeeHaciaAbajo(tipo)) -arriba else arriba
         var mejor = 0
         var mejorDot = -2f
         GeometriaDados.normales(tipo).forEachIndexed { i, normalLocal ->

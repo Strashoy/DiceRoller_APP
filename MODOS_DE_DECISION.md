@@ -54,8 +54,8 @@ Pase lo que pase, la tirada termina con todos los dados apoyados sobre una cara 
      contra arista, que la prueba de "vértice dentro del otro dado" no veía.
    * Después de cada sub-paso se separan directamente las posiciones de cualquier par que se
      superponga más de 0,4 mm (proyección, sin agregar velocidad).
-   * Un dado nunca arranca dentro de otro (se lo sube hasta que quede libre), y los rescates
-     (asentar a la fuerza, devolver al centro) lo ubican en un lugar libre de la mesa.
+   * Un dado nunca arranca dentro de otro (se lo sube hasta que quede libre). Al acomodar un dado
+     en su lugar se lo saca del vecino por el camino más corto (milímetros), nunca se lo mueve de sitio.
    * Antes de terminar se verifica que no quede ningún par superpuesto.
    * Medido (test `SolapamientosTest`, 50 tiradas de 2 a 20 dados): superposición máxima 0 al
      inicio, 0,8 mm en el peor sub-paso y 0,4 mm al final (imperceptible).
@@ -192,13 +192,34 @@ Cómo funciona:
 * La pared frontal se dibuja **en corte** (casi transparente) para ver la caída.
 * Funciona con **los dos modos** de decisión: en el predeterminado la caída completa por la torre
   se pre-simula y se reproduce con las rotaciones de simetría.
-* **Garantía extra**: un dado que queda quieto dentro de la torre se empuja como uno montado y,
-  si sigue trabado, se lo saca a la bandeja. El resultado siempre se lee afuera.
+* **Garantía extra**: si un dado queda quieto dentro de la torre, la torre recibe golpecitos. Si aun
+  así queda plano sobre una rampa, vale como en la mesa real: se lee respecto de la rampa.
 * **Muchos dados**: se vierten **de a uno** (cada 0,12 s), la rampa de salida sigue 4 cm dentro de
-  la bandeja (lengua de salida) y un dado montado se **relanza en el lugar más libre** de la
-  bandeja, como en la mesa real, en vez de empujarlo sobre la misma pila. Si un dado se queda quieto
-  dentro de la torre, la torre recibe un **golpecito** enseguida. Con 15 dados una tirada dura
-  3,6–4,5 s sin asentar nada a la fuerza; con 20, unos 5–5,7 s (incluye 2,4 s de vertido).
+  la bandeja (lengua de salida). Si un dado se queda quieto dentro de la torre, la torre recibe un
+  **golpecito** enseguida. Con 15 dados una tirada dura 3,3–4 s de media (máx. 5,6 s) sin acomodar
+  nada; con 20, unos 5–5,7 s (incluye 2,4 s de vertido), sin llegar nunca al límite de tiempo.
+
+## Lectura respecto del apoyo (sin teletransportes)
+
+Ningún dado aparece de golpe en otro lado del tablero. La cara de arriba se lee **respecto de la
+superficie que sostiene al dado**, no sólo de la vertical:
+
+* El motor calcula, para cada dado, su **normal de apoyo** (`EstadoCuerpo.apoyo`): agrupa sus
+  contactos por "con quién" (piso, cada rampa, cada dado vecino), pesa cada grupo por la carga que
+  soporta, descarta lo que tenga más de 60° de pendiente (paredes, caras empinadas) y se queda con la
+  superficie contra la que el dado tiene una cara más pareja. Así la presión lateral de un montón no
+  inclina la lectura.
+* `LectorCara.leer(tipo, orientacion, arriba)` es el mismo lector de siempre con otra "vertical": un
+  dado apoyado plano sobre una rampa o sobre la cara de otro dado muestra la cara paralela a esa
+  superficie, y es válido.
+* Un dado **montado** (sobre una arista o un vértice) recibe un **empujoncito en el lugar** (hacia
+  arriba y lejos de los dados y paredes en que se recuesta), hasta 3 veces. Si persiste, se lo
+  **acomoda donde está** (`asentarEnSitio`): se lo gira lo mínimo para que la cara más cercana quede
+  paralela a su apoyo y se lo separa milímetros de lo que toque.
+* Si pasan 1,5 s sin que ningún dado nuevo se duerma (unos pocos se zarandean en un montón), los
+  que ya están planos se asientan ahí mismo y sólo los montados reciben empujoncito.
+* En el modo predeterminado la rotación de simetría conserva esta lectura: la cara que queda
+  paralela al apoyo es la pedida.
 * El aro del castillo se abre siempre frente a la puerta, aunque crezca la bandeja.
 * Separación mínima de 3 cm entre rampas para que ningún dado (el d20 mide ~2,9 cm) quede encajado.
 
