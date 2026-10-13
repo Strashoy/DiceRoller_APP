@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="Theme.DiceRoller" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/fondo_fantasia</item>
+    </style>
+
+    <!-- Splash nativo: se mantiene hasta que el ViewModel termina de leer DataStore. -->
+    <style name="Theme.App.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/fondo_fantasia</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.DiceRoller</item>
+    </style>
+</resources>
