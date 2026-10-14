@@ -3,7 +3,10 @@ package com.rolesencia.diceroller.ui.screen
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.view.HapticFeedbackConstants
 import androidx.annotation.DrawableRes
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -31,8 +34,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Surface
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
@@ -42,6 +49,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -51,6 +60,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
@@ -70,10 +80,18 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.rolesencia.diceroller.R
 import com.rolesencia.diceroller.domain.apariencia.SkinDado
+import com.rolesencia.diceroller.domain.historial.Notacion
+import com.rolesencia.diceroller.domain.reglas.Conservar
+import com.rolesencia.diceroller.sensorial.AgitarParaLanzar
 import com.rolesencia.diceroller.sensorial.FeedbackTactil
+import com.rolesencia.diceroller.sensorial.rememberLectorVoz
+import com.rolesencia.diceroller.tirada.Gesto
+import kotlinx.coroutines.launch
+import kotlin.random.Random
 import com.rolesencia.diceroller.tirada.torre.ModelosTorre
 import com.rolesencia.diceroller.ui.components.FilaFichas
 import com.rolesencia.diceroller.ui.components.HojaAjustes
+import com.rolesencia.diceroller.ui.components.HojaHistorial
 import com.rolesencia.diceroller.ui.components.HojaParametros
 import com.rolesencia.diceroller.ui.components.SelectorSistema
 import com.rolesencia.diceroller.ui.components.SolapaDados
@@ -112,6 +130,28 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
         onDispose { vista.keepScreenOn = false }
     }
     ModoInmersivo(state.pantallaCompleta)
+
+    // Voz: lee cada veredicto nuevo (no el último guardado al abrir la app).
+    val lector = rememberLectorVoz(state.vozHabilitada)
+    val abiertaEn = remember { System.currentTimeMillis() }
+    val ultimaTirada = state.historial.firstOrNull()
+    LaunchedEffect(ultimaTirada?.instante, lector) {
+        if (lector != null && ultimaTirada != null && ultimaTirada.instante > abiertaEn) {
+            lector.decir(listOf(ultimaTirada.titulo, ultimaTirada.detalle).filter { it.isNotBlank() }.joinToString(". "))
+        }
+    }
+
+    // Agitar el teléfono = lanzar, sólo con la mesa a la vista y algo para tirar.
+    AgitarParaLanzar(
+        activo = state.agitarHabilitado && !ocupado && hoja == Hoja.NINGUNA && state.pool.isNotEmpty()
+    ) { fuerza ->
+        vista.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        viewModel.lanzar(Gesto(Random.nextFloat() * 2f - 1f, -1f, fuerza))
+    }
+
+    // Quitar un dado con pulsación larga se puede deshacer (patrón de Material: acción + "Deshacer").
+    val avisos = remember { SnackbarHostState() }
+    val alcance = rememberCoroutineScope()
 
     // Alto real de las barras superpuestas: la cámara encuadra la mesa en lo que queda libre.
     val densidad = LocalDensity.current
@@ -155,6 +195,7 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
                 opacidad = opacidadControles,
                 onSistema = { hoja = Hoja.SISTEMA },
                 onLanzamiento = viewModel::seleccionarLanzamiento,
+                onHistorial = { hoja = Hoja.HISTORIAL },
                 onAjustes = { hoja = Hoja.AJUSTES }
             )
             Marcador(state, hayTorre = torre != null)
@@ -176,7 +217,18 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
                 resultados = state.resultados,
                 destacados = state.veredicto?.dadosDestacados.orEmpty(),
                 estaRodando = ocupado,
-                onQuitarDado = viewModel::quitarDado,
+                onQuitarDado = { id ->
+                    val quitado = state.pool.firstOrNull { it.id == id }
+                    viewModel.quitarDado(id)
+                    if (quitado != null) alcance.launch {
+                        avisos.currentSnackbarData?.dismiss()
+                        val r = avisos.showSnackbar(
+                            "Quitaste un ${quitado.tipo.etiqueta}", actionLabel = "Deshacer",
+                            duration = SnackbarDuration.Short
+                        )
+                        if (r == SnackbarResult.ActionPerformed) viewModel.restaurarDado(quitado)
+                    }
+                },
                 textoVacio = "Tocá «Dados» para armar la tirada"
             )
             Spacer(Modifier.height(8.dp))
@@ -192,20 +244,13 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
                     modifier = Modifier.weight(1f).alpha(opacidadControles),
                     onClick = { hoja = Hoja.PARAMETROS }
                 )
-                Button(
-                    onClick = { FeedbackTactil.clickBoton(vista); viewModel.lanzar() },
-                    enabled = !ocupado && state.pool.isNotEmpty(),
-                    shape = RoundedCornerShape(32.dp),
-                    contentPadding = PaddingValues(horizontal = 20.dp),
-                    modifier = Modifier.height(64.dp).widthIn(min = 132.dp)
-                ) {
-                    Text(
-                        if (ocupado) "Rodando…" else "LANZAR",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Black,
-                        maxLines = 1
-                    )
-                }
+                BotonLanzar(
+                    ocupado = ocupado,
+                    habilitado = !ocupado && state.pool.isNotEmpty(),
+                    conservar = state.parametros.conservar,
+                    onLanzar = { FeedbackTactil.clickBoton(vista); viewModel.lanzar() },
+                    onLanzarCon = viewModel::lanzarCon
+                )
                 BotonSecundario(
                     icono = R.drawable.ic_dados,
                     texto = if (state.pool.isEmpty()) "Dados" else "Dados · ${state.pool.size}",
@@ -236,6 +281,13 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
             solicitudApertura = abrirSolapa
         )
 
+        SnackbarHost(
+            avisos,
+            Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = with(densidad) { altoInferior.toDp() } + 8.dp)
+        )
+
         if (mostrarCreador) {
             CreadorSkin(
                 inicial = skinEnEdicion,
@@ -251,6 +303,18 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
     when (hoja) {
         Hoja.NINGUNA -> Unit
         Hoja.SISTEMA -> SelectorSistema(state.sistema, viewModel::seleccionarSistema, cerrar)
+        Hoja.HISTORIAL -> HojaHistorial(
+            historial = state.historial,
+            guardadas = state.tiradasGuardadas,
+            notacionActual = Notacion.de(state.pool, if (state.sistema.usaModificador) state.parametros.modificador else 0),
+            habilitado = !ocupado,
+            onRepetir = viewModel::repetir,
+            onBorrarHistorial = viewModel::borrarHistorial,
+            onLanzarGuardada = viewModel::lanzarGuardada,
+            onGuardarActual = viewModel::guardarTiradaActual,
+            onBorrarGuardada = viewModel::borrarTiradaGuardada,
+            onCerrar = cerrar
+        )
         Hoja.PARAMETROS -> HojaParametros(
             parametros = state.parametros,
             usaModificador = state.sistema.usaModificador,
@@ -283,12 +347,16 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
             onPantallaEncendida = viewModel::togglePantallaEncendida,
             pantallaCompleta = state.pantallaCompleta,
             onPantallaCompleta = viewModel::togglePantallaCompleta,
+            voz = state.vozHabilitada,
+            onVoz = viewModel::toggleVoz,
+            agitar = state.agitarHabilitado,
+            onAgitar = viewModel::toggleAgitar,
             onCerrar = cerrar
         )
     }
 }
 
-private enum class Hoja { NINGUNA, SISTEMA, PARAMETROS, AJUSTES }
+private enum class Hoja { NINGUNA, SISTEMA, PARAMETROS, AJUSTES, HISTORIAL }
 
 @Composable
 private fun BarraSuperior(
@@ -297,6 +365,7 @@ private fun BarraSuperior(
     opacidad: Float,
     onSistema: () -> Unit,
     onLanzamiento: (String?) -> Unit,
+    onHistorial: () -> Unit,
     onAjustes: () -> Unit
 ) {
     var menuLanzamiento by remember { mutableStateOf(false) }
@@ -335,6 +404,9 @@ private fun BarraSuperior(
                 }
             }
         }
+        IconButton(onClick = onHistorial) {
+            Icon(painterResource(R.drawable.ic_historial), contentDescription = "Historial y tiradas guardadas", tint = Ivory)
+        }
         IconButton(onClick = onAjustes) {
             Icon(painterResource(R.drawable.ic_ajustes), contentDescription = "Ajustes", tint = Ivory)
         }
@@ -364,6 +436,73 @@ private fun PildoraSuperior(
         Spacer(Modifier.width(8.dp))
         Text(texto, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
         Text(" ▾", color = Ivory.copy(alpha = 0.6f))
+    }
+}
+
+/**
+ * LANZAR: un toque lanza; mantenerlo apretado abre ventaja / desventaja / normal y lanza con lo
+ * elegido (el botón de tirada de D&D Beyond funciona igual). Si hay ventaja o desventaja activa,
+ * el botón lo muestra para que no se olvide.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun BotonLanzar(
+    ocupado: Boolean,
+    habilitado: Boolean,
+    conservar: Conservar,
+    onLanzar: () -> Unit,
+    onLanzarCon: (Conservar) -> Unit
+) {
+    val vista = LocalView.current
+    var menu by remember { mutableStateOf(false) }
+    val fondo = if (habilitado) MaterialTheme.colorScheme.primary else Ivory.copy(alpha = 0.12f)
+    val tinta = if (habilitado) MaterialTheme.colorScheme.onPrimary else Ivory.copy(alpha = 0.45f)
+    Box {
+        Surface(
+            shape = RoundedCornerShape(32.dp),
+            color = fondo,
+            contentColor = tinta,
+            modifier = Modifier
+                .height(64.dp)
+                .widthIn(min = 132.dp)
+                .clip(RoundedCornerShape(32.dp))
+                .combinedClickable(
+                    enabled = habilitado,
+                    onClickLabel = "Lanzar",
+                    onLongClickLabel = "Elegir ventaja o desventaja",
+                    onLongClick = {
+                        vista.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        menu = true
+                    },
+                    onClick = onLanzar
+                )
+        ) {
+            Column(
+                Modifier.padding(horizontal = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text(if (ocupado) "Rodando…" else "LANZAR", fontSize = 20.sp, fontWeight = FontWeight.Black, maxLines = 1)
+                val marca = when (conservar) {
+                    Conservar.MAYOR -> "con ventaja"
+                    Conservar.MENOR -> "con desventaja"
+                    Conservar.TODOS -> null
+                }
+                if (marca != null && !ocupado) Text(marca, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            }
+        }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            listOf(
+                Conservar.MAYOR to "Con ventaja (el mayor)",
+                Conservar.MENOR to "Con desventaja (el menor)",
+                Conservar.TODOS to "Normal"
+            ).forEach { (modo, texto) ->
+                DropdownMenuItem(
+                    text = { Text(if (modo == conservar) "✓ $texto" else texto) },
+                    onClick = { menu = false; onLanzarCon(modo) }
+                )
+            }
+        }
     }
 }
 
@@ -405,8 +544,10 @@ private fun Marcador(state: DiceRollerUiState, hayTorre: Boolean) {
         state.estaRodando -> "Rodando…" to null
         state.veredicto != null -> state.veredicto.titulo to state.veredicto.detalle.takeIf { it.isNotBlank() }
         state.pool.isEmpty() -> "Mesa vacía" to "Deslizá desde el borde derecho o tocá «Dados»"
-        hayTorre -> "Listo para lanzar" to "LANZAR suelta los dados por la torre"
-        else -> "Listo para lanzar" to "Deslizá el dedo sobre la mesa o tocá LANZAR"
+        // Las primeras veces, la pista de uso; después, la tirada en notación ("1d20 + 5").
+        state.historial.size < 3 && hayTorre -> "Listo para lanzar" to "LANZAR suelta los dados por la torre · mantenelo para ventaja"
+        state.historial.size < 3 -> "Listo para lanzar" to "Deslizá sobre la mesa, agitá el teléfono o mantené LANZAR para ventaja"
+        else -> Notacion.de(state.pool, if (state.sistema.usaModificador) state.parametros.modificador else 0) to state.sistema.nombre
     }
     val color = state.veredicto?.takeIf { !state.estaRodando && !state.preparando }?.let { colorDe(it.nivel) } ?: Ivory
     val esVeredicto = state.veredicto != null && !state.estaRodando && !state.preparando

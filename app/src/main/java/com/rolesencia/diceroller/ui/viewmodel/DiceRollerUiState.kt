@@ -4,6 +4,8 @@ import com.rolesencia.diceroller.domain.apariencia.CatalogoSkins
 import com.rolesencia.diceroller.domain.apariencia.SkinDado
 import com.rolesencia.diceroller.domain.dados.DadoEnMesa
 import com.rolesencia.diceroller.domain.dados.ResultadoDado
+import com.rolesencia.diceroller.domain.historial.EntradaHistorial
+import com.rolesencia.diceroller.domain.historial.TiradaGuardada
 import com.rolesencia.diceroller.domain.reglas.ParametrosTirada
 import com.rolesencia.diceroller.domain.reglas.SistemaReglas
 import com.rolesencia.diceroller.domain.reglas.Veredicto
@@ -74,7 +76,15 @@ data class DiceRollerUiState(
     val vibracionHabilitada: Boolean = true,
     val pantallaEncendida: Boolean = true,
     /** Modo inmersivo: oculta las barras del sistema (vuelven deslizando desde el borde). */
-    val pantallaCompleta: Boolean = true
+    val pantallaCompleta: Boolean = true,
+    /** Leer el veredicto en voz alta (como el "speech" de Dice by PCalc). */
+    val vozHabilitada: Boolean = false,
+    /** Agitar el teléfono lanza los dados, como sacudir un cubilete. */
+    val agitarHabilitado: Boolean = true,
+
+    // Historial (más reciente primero) y tiradas frecuentes guardadas con nombre
+    val historial: List<EntradaHistorial> = emptyList(),
+    val tiradasGuardadas: List<TiradaGuardada> = emptyList()
 ) {
     companion object {
         const val MAX_DADOS = 30

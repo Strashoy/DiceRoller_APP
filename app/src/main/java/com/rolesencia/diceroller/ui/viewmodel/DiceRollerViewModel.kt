@@ -16,6 +16,11 @@ import com.rolesencia.diceroller.domain.dados.LanzadorAleatorio
 import com.rolesencia.diceroller.domain.dados.ResultadoDado
 import com.rolesencia.diceroller.domain.dados.RolDado
 import com.rolesencia.diceroller.domain.dados.TipoDado
+import com.rolesencia.diceroller.domain.historial.EntradaHistorial
+import com.rolesencia.diceroller.domain.historial.MAX_HISTORIAL
+import com.rolesencia.diceroller.domain.historial.Notacion
+import com.rolesencia.diceroller.domain.historial.TiradaGuardada
+import com.rolesencia.diceroller.domain.historial.Ventaja
 import com.rolesencia.diceroller.domain.reglas.CatalogoSistemas
 import com.rolesencia.diceroller.domain.reglas.Conservar
 import com.rolesencia.diceroller.domain.reglas.ParametrosTirada
@@ -94,7 +99,11 @@ class DiceRollerViewModel(
                     audioHabilitado = prefs.audioHabilitado,
                     vibracionHabilitada = prefs.vibracionHabilitada,
                     pantallaEncendida = prefs.pantallaEncendida,
-                    pantallaCompleta = prefs.pantallaCompleta
+                    pantallaCompleta = prefs.pantallaCompleta,
+                    vozHabilitada = prefs.vozHabilitada,
+                    agitarHabilitado = prefs.agitarHabilitado,
+                    historial = prefs.historial,
+                    tiradasGuardadas = prefs.tiradasGuardadas
                 )
             }
         }
@@ -119,7 +128,9 @@ class DiceRollerViewModel(
                     audioHabilitado = s.audioHabilitado,
                     vibracionHabilitada = s.vibracionHabilitada,
                     pantallaEncendida = s.pantallaEncendida,
-                    pantallaCompleta = s.pantallaCompleta
+                    pantallaCompleta = s.pantallaCompleta,
+                    vozHabilitada = s.vozHabilitada,
+                    agitarHabilitado = s.agitarHabilitado
                 )
             )
         }
@@ -191,6 +202,13 @@ class DiceRollerViewModel(
         val delTipo = estado.pool.filter { it.tipo == tipo }
         val aQuitar = delTipo.lastOrNull { it.rol == rol } ?: delTipo.lastOrNull() ?: return@editarMesa estado
         estado.copy(pool = estado.pool - aQuitar)
+    }
+
+    /** "Deshacer" tras quitar un dado: vuelve tal cual estaba (tipo, rol y skin). */
+    fun restaurarDado(dado: DadoEnMesa) = editarMesa { estado ->
+        if (estado.pool.size >= DiceRollerUiState.MAX_DADOS) return@editarMesa estado
+        val id = if (estado.pool.any { it.id == dado.id }) (estado.pool.maxOfOrNull { it.id } ?: -1) + 1 else dado.id
+        estado.copy(pool = estado.pool + dado.copy(id = id))
     }
 
     fun restaurarTiradaSugerida() = editarMesa { estado ->
@@ -295,6 +313,16 @@ class DiceRollerViewModel(
         guardar()
     }
 
+    fun toggleVoz() {
+        _uiState.update { it.copy(vozHabilitada = !it.vozHabilitada) }
+        guardar()
+    }
+
+    fun toggleAgitar() {
+        _uiState.update { it.copy(agitarHabilitado = !it.agitarHabilitado) }
+        guardar()
+    }
+
     fun togglePantallaCompleta() {
         _uiState.update { it.copy(pantallaCompleta = !it.pantallaCompleta) }
         guardar()
@@ -303,6 +331,69 @@ class DiceRollerViewModel(
     fun togglePantallaEncendida() {
         _uiState.update { it.copy(pantallaEncendida = !it.pantallaEncendida) }
         guardar()
+    }
+
+    // --- TIRADAS RÁPIDAS: ventaja, historial y tiradas guardadas ---
+
+    /**
+     * Pulsación larga en LANZAR: elegir ventaja, desventaja o normal y lanzar en el mismo gesto
+     * (como el menú del botón de tirada de D&D Beyond). En el sistema d20 agrega o quita el segundo d20.
+     */
+    fun lanzarCon(conservar: Conservar) {
+        if (ocupado) return
+        editarMesa { estado ->
+            estado.copy(
+                pool = Ventaja.ajustarPool(estado.sistema.id, estado.pool, conservar, estado.skinActual),
+                parametros = estado.parametros.copy(conservar = conservar)
+            )
+        }
+        lanzar()
+    }
+
+    /** Deja la mesa como en una tirada anterior o guardada (sistema, dados y parámetros). */
+    private fun cargar(sistemaId: String, pool: List<DadoEnMesa>, parametros: ParametrosTirada) = editarMesa {
+        it.copy(
+            sistema = CatalogoSistemas.porId(sistemaId),
+            pool = pool.mapIndexed { i, d -> d.copy(id = i) },
+            parametros = parametros
+        )
+    }
+
+    /** "Otra vez": repite una tirada del historial tal cual (D&D Beyond, Roll20). */
+    fun repetir(entrada: EntradaHistorial) {
+        if (ocupado || entrada.pool.isEmpty()) return
+        cargar(entrada.sistemaId, entrada.pool, entrada.parametros)
+        lanzar()
+    }
+
+    /** Tocar una tirada guardada la carga y la lanza (presets de Dice by PCalc). */
+    fun lanzarGuardada(tirada: TiradaGuardada) {
+        if (ocupado || tirada.pool.isEmpty()) return
+        cargar(tirada.sistemaId, tirada.pool, tirada.parametros)
+        lanzar()
+    }
+
+    /** Guarda la mesa actual con un nombre; si el nombre ya existe, la reemplaza. */
+    fun guardarTiradaActual(nombre: String) {
+        val limpio = nombre.trim().take(40)
+        if (limpio.isEmpty()) return
+        _uiState.update { s ->
+            val nueva = TiradaGuardada(limpio, s.sistema.id, s.pool, s.parametros)
+            s.copy(tiradasGuardadas = s.tiradasGuardadas.filterNot { it.nombre.equals(limpio, ignoreCase = true) } + nueva)
+        }
+        val lista = _uiState.value.tiradasGuardadas
+        viewModelScope.launch { gestorPreferencias.guardarTiradas(lista) }
+    }
+
+    fun borrarTiradaGuardada(tirada: TiradaGuardada) {
+        _uiState.update { s -> s.copy(tiradasGuardadas = s.tiradasGuardadas - tirada) }
+        val lista = _uiState.value.tiradasGuardadas
+        viewModelScope.launch { gestorPreferencias.guardarTiradas(lista) }
+    }
+
+    fun borrarHistorial() {
+        _uiState.update { it.copy(historial = emptyList()) }
+        viewModelScope.launch { gestorPreferencias.guardarHistorial(emptyList()) }
     }
 
     // --- LANZAMIENTO ---
@@ -409,15 +500,31 @@ class DiceRollerViewModel(
         )
         Log.d(TAG, "Tirada ${metricas.sesion.modo}: primer movimiento ${metricas.latenciaPrimerMovimientoMs} ms")
         _uiState.update {
+            val veredicto = it.sistema.evaluar(acumulados, it.parametros)
+            val entrada = EntradaHistorial(
+                instante = System.currentTimeMillis(),
+                sistemaId = it.sistema.id,
+                sistemaNombre = it.sistema.nombre,
+                notacion = Notacion.de(it.pool, if (it.sistema.usaModificador) it.parametros.modificador else 0),
+                valores = Notacion.valores(acumulados),
+                nivel = veredicto.nivel,
+                titulo = veredicto.titulo,
+                detalle = veredicto.detalle,
+                pool = it.pool,
+                parametros = it.parametros
+            )
             it.copy(
                 sesion = null,
                 estaRodando = false,
                 dadosEnMesa = estadoFinal,
                 resultados = acumulados.toList(),
-                veredicto = it.sistema.evaluar(acumulados, it.parametros),
-                metricas = metricas
+                veredicto = veredicto,
+                metricas = metricas,
+                historial = (listOf(entrada) + it.historial).take(MAX_HISTORIAL)
             )
         }
+        val historial = _uiState.value.historial
+        viewModelScope.launch { gestorPreferencias.guardarHistorial(historial) }
     }
 
     override fun onCleared() {

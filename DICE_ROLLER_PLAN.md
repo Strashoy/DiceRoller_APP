@@ -168,6 +168,7 @@ Las dos dependencias 3D ya están declaradas en `gradle/libs.versions.toml` y **
 | 3 | Lanzar agitando el teléfono; pre-simular al apoyar el dedo para ocultar la latencia del modo 2; optimizar asignaciones del motor | ⏳ |
 | 4 | Historial de tiradas (Room), presets por personaje, sistema personalizado, accesibilidad (anuncio del veredicto con TalkBack) | ⏳ |
 | 4b | **Interfaz a pantalla completa**: mesa a sangre, barras superpuestas con área útil para la cámara, hojas inferiores, modo inmersivo (bitácora, cap. 12) | ✅ |
+| 4c | **Atajos de las apps pagas**: historial (50) con "otra vez", tiradas guardadas, notación, ventaja con pulsación larga, agitar para lanzar, voz, deshacer (bitácora, cap. 13) | ✅ |
 | 5 | Pulido: modelos glTF + SceneView (PBR), materiales de dados, optimización en gama baja, publicación | ⏳ |
 
 ## 8. Fuentes consultadas

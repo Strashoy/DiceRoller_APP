@@ -19,7 +19,12 @@ import com.rolesencia.diceroller.domain.apariencia.SkinDado
 import com.rolesencia.diceroller.domain.dados.DadoEnMesa
 import com.rolesencia.diceroller.domain.dados.RolDado
 import com.rolesencia.diceroller.domain.dados.TipoDado
+import com.rolesencia.diceroller.domain.historial.EntradaHistorial
+import com.rolesencia.diceroller.domain.historial.MAX_HISTORIAL
+import com.rolesencia.diceroller.domain.historial.TiradaGuardada
 import com.rolesencia.diceroller.domain.reglas.Conservar
+import com.rolesencia.diceroller.domain.reglas.NivelResultado
+import com.rolesencia.diceroller.domain.reglas.ParametrosTirada
 import com.rolesencia.diceroller.sensorial.MaterialMesa
 import com.rolesencia.diceroller.tirada.ModoDecision
 import kotlinx.coroutines.flow.Flow
@@ -45,7 +50,13 @@ data class PreferenciasGuardadas(
     val audioHabilitado: Boolean,
     val vibracionHabilitada: Boolean,
     val pantallaEncendida: Boolean,
-    val pantallaCompleta: Boolean = true
+    val pantallaCompleta: Boolean = true,
+    val vozHabilitada: Boolean = false,
+    val agitarHabilitado: Boolean = true,
+    // Se leen junto con el resto pero se guardan aparte (guardarHistorial / guardarTiradas):
+    // así cambiar un ajuste no reescribe 50 tiradas.
+    val historial: List<EntradaHistorial> = emptyList(),
+    val tiradasGuardadas: List<TiradaGuardada> = emptyList()
 )
 
 class GestorPreferencias(private val context: Context) {
@@ -66,6 +77,10 @@ class GestorPreferencias(private val context: Context) {
         val VIBRACION = booleanPreferencesKey("vibracion_habilitada")
         val PANTALLA = booleanPreferencesKey("pantalla_encendida")
         val PANTALLA_COMPLETA = booleanPreferencesKey("pantalla_completa")
+        val VOZ = booleanPreferencesKey("voz_habilitada")
+        val AGITAR = booleanPreferencesKey("agitar_habilitado")
+        val HISTORIAL = stringPreferencesKey("historial")
+        val TIRADAS = stringPreferencesKey("tiradas_guardadas")
         const val SIN_OBJETIVO = Int.MIN_VALUE
     }
 
@@ -92,7 +107,11 @@ class GestorPreferencias(private val context: Context) {
                 audioHabilitado = p[AUDIO] ?: true,
                 vibracionHabilitada = p[VIBRACION] ?: true,
                 pantallaEncendida = p[PANTALLA] ?: true,
-                pantallaCompleta = p[PANTALLA_COMPLETA] ?: true
+                pantallaCompleta = p[PANTALLA_COMPLETA] ?: true,
+                vozHabilitada = p[VOZ] ?: false,
+                agitarHabilitado = p[AGITAR] ?: true,
+                historial = decodificarHistorial(p[HISTORIAL].orEmpty(), decodificarSkins(p[SKINS].orEmpty())),
+                tiradasGuardadas = decodificarTiradas(p[TIRADAS].orEmpty(), decodificarSkins(p[SKINS].orEmpty()))
             )
         }
 
@@ -113,7 +132,17 @@ class GestorPreferencias(private val context: Context) {
             p[VIBRACION] = prefs.vibracionHabilitada
             p[PANTALLA] = prefs.pantallaEncendida
             p[PANTALLA_COMPLETA] = prefs.pantallaCompleta
+            p[VOZ] = prefs.vozHabilitada
+            p[AGITAR] = prefs.agitarHabilitado
         }
+    }
+
+    suspend fun guardarHistorial(historial: List<EntradaHistorial>) {
+        context.dataStore.edit { it[HISTORIAL] = codificarHistorial(historial.take(MAX_HISTORIAL)) }
+    }
+
+    suspend fun guardarTiradas(tiradas: List<TiradaGuardada>) {
+        context.dataStore.edit { it[TIRADAS] = codificarTiradas(tiradas) }
     }
 }
 
@@ -161,3 +190,52 @@ internal fun decodificarSkins(texto: String): List<SkinDado> = texto.lines().fil
         imagenes = p.getOrNull(8)?.split(";")?.filter { it.isNotBlank() }.orEmpty()
     )
 }
+
+// --- Historial y tiradas guardadas: una por línea, campos separados por "|" ---
+
+private fun limpio(texto: String) = texto.replace("|", "/").replace(SEPARADOR_SKINS, " ")
+
+private fun codificarParametros(p: ParametrosTirada) = "${p.modificador};${p.objetivo ?: ""};${p.conservar.name}"
+
+private fun decodificarParametros(texto: String): ParametrosTirada {
+    val p = texto.split(";")
+    return ParametrosTirada(
+        modificador = p.getOrNull(0)?.toIntOrNull() ?: 0,
+        objetivo = p.getOrNull(1)?.toIntOrNull(),
+        conservar = p.getOrNull(2)?.let { runCatching { Conservar.valueOf(it) }.getOrNull() } ?: Conservar.TODOS
+    )
+}
+
+/** "instante|sistemaId|sistemaNombre|notación|valores|nivel|título|detalle|pool|parámetros" */
+internal fun codificarHistorial(historial: List<EntradaHistorial>): String = historial.joinToString(SEPARADOR_SKINS) { e ->
+    listOf(
+        e.instante.toString(), e.sistemaId, limpio(e.sistemaNombre), limpio(e.notacion), limpio(e.valores),
+        e.nivel.name, limpio(e.titulo), limpio(e.detalle), codificarPool(e.pool), codificarParametros(e.parametros)
+    ).joinToString("|")
+}
+
+internal fun decodificarHistorial(texto: String, skins: List<SkinDado> = emptyList()): List<EntradaHistorial> =
+    texto.lines().filter { it.isNotBlank() }.mapNotNull { linea ->
+        val p = linea.split("|")
+        if (p.size < 10) return@mapNotNull null
+        EntradaHistorial(
+            instante = p[0].toLongOrNull() ?: return@mapNotNull null,
+            sistemaId = p[1], sistemaNombre = p[2], notacion = p[3], valores = p[4],
+            nivel = runCatching { NivelResultado.valueOf(p[5]) }.getOrNull() ?: NivelResultado.NEUTRO,
+            titulo = p[6], detalle = p[7],
+            pool = decodificarPool(p[8], skins),
+            parametros = decodificarParametros(p[9])
+        )
+    }
+
+/** "nombre|sistemaId|pool|parámetros" */
+internal fun codificarTiradas(tiradas: List<TiradaGuardada>): String = tiradas.joinToString(SEPARADOR_SKINS) { t ->
+    listOf(limpio(t.nombre), t.sistemaId, codificarPool(t.pool), codificarParametros(t.parametros)).joinToString("|")
+}
+
+internal fun decodificarTiradas(texto: String, skins: List<SkinDado> = emptyList()): List<TiradaGuardada> =
+    texto.lines().filter { it.isNotBlank() }.mapNotNull { linea ->
+        val p = linea.split("|")
+        if (p.size < 4) return@mapNotNull null
+        TiradaGuardada(p[0], p[1], decodificarPool(p[2], skins), decodificarParametros(p[3]))
+    }

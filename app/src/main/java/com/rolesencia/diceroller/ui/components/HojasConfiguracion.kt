@@ -146,6 +146,10 @@ fun HojaAjustes(
     onPantallaEncendida: () -> Unit,
     pantallaCompleta: Boolean,
     onPantallaCompleta: () -> Unit,
+    voz: Boolean,
+    onVoz: () -> Unit,
+    agitar: Boolean,
+    onAgitar: () -> Unit,
     onCerrar: () -> Unit
 ) {
     ModalBottomSheet(
@@ -200,9 +204,13 @@ fun HojaAjustes(
                 }
             }
 
-            Seccion("Sonido y vibración")
+            Seccion("Lanzar")
+            Interruptor("Agitar para lanzar", "Sacudí el teléfono como un cubilete", agitar, onAgitar)
+
+            Seccion("Sonido, vibración y voz")
             Interruptor("Sonido de los dados", "Foley grabado: cada choque suena distinto", audio, onAudio)
             Interruptor("Vibración", "Proporcional a la fuerza de cada golpe", vibracion, onVibracion)
+            Interruptor("Leer el resultado en voz alta", "Para tirar sin mirar la pantalla", voz, onVoz)
 
             Seccion("Pantalla")
             Interruptor("Pantalla completa", "Oculta las barras del sistema; deslizá desde el borde para verlas", pantallaCompleta, onPantallaCompleta)

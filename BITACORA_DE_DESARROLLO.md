@@ -417,6 +417,48 @@ personaje y un "modo vitrina" para grabar el video promocional, que ahora tienen
 
 ---
 
+## Capítulo 13 · Lo que hacen bien las otras apps de dados
+
+**El pedido.** "Incorporá las mejores prácticas de UI e interacción del resto de las apps de dados."
+
+**Qué se tomó y de dónde.** Se eligieron los patrones que se repiten en varias apps pagas (no los
+de una sola), y que encajan con una mesa a pantalla completa:
+
+| Práctica | Quién la usa | Cómo quedó en Dice Roller |
+|---|---|---|
+| **Historial** de tiradas con resultado | Dice by PCalc (roll history), D&D Beyond (game log), Dice Roller PRO+ | Hoja "Historial": notación, valores, veredicto con su color y hace cuánto. Guarda las últimas 50 |
+| **"Otra vez"**: repetir una tirada | D&D Beyond, Roll20 | Botón en cada entrada: restaura sistema, dados y parámetros, y lanza |
+| **Tiradas guardadas** con nombre | Dice by PCalc (presets), Dice Roller PRO+ | Pestaña "Guardadas": "Espada larga" se guarda una vez y se lanza con un toque |
+| **Notación de dados** (1d20 + 2d8 + 5) | Roll20, D&D Beyond, dddice | En el marcador (antes de tirar), el historial y las guardadas |
+| **Ventaja / desventaja de un gesto** | D&D Beyond (menú del botón de tirada), PCalc | Mantener LANZAR: ventaja, desventaja o normal, y lanza. En D&D agrega o quita el segundo d20 solo. El botón avisa "con ventaja" |
+| **Agitar para lanzar** | DiceShaker, la mayoría de los lanzadores móviles | Acelerómetro: dos picos fuertes seguidos lanzan; 1,5 s de espera; desactivable |
+| **Leer el resultado en voz alta** | Dice by PCalc (speech) | TextToSpeech en español (rioplatense si el motor lo tiene), desactivado por defecto |
+| **Deshacer** | Pauta de Material (snackbar con acción) | Quitar un dado con pulsación larga muestra "Quitaste un d8 · Deshacer" |
+| **Pistas que se retiran solas** | Onboarding de juegos móviles | Las tres primeras tiradas el marcador enseña los gestos; después muestra la notación |
+
+**Lo que se dejó afuera, a propósito.** Dados con caras personalizadas (PCalc) y estadísticas de
+equidad (DiceShaker) son buenas ideas pero piden su propio diseño; quedan en la lista de pendientes.
+El historial va en DataStore y no en Room: con 50 entradas alcanza, y Room sigue reservado para la
+fase 4 (historial ilimitado, presets por personaje).
+
+**Problemas y soluciones.**
+
+| Problema | Causa | Solución |
+|---|---|---|
+| Al abrir la app, la voz leía la última tirada guardada | El historial persistido "aparecía" como tirada nueva | Sólo se leen tiradas posteriores a la apertura |
+| Ventaja en D&D exigía agregar el segundo d20 a mano | El sistema evalúa "el mayor de los d20" | `Ventaja.ajustarPool` agrega/quita el segundo d20 (testeado) |
+| Agitar lanzaba al caminar o al apoyar el teléfono | Un solo pico de aceleración alcanza | Umbral de 14 m/s² sobre la gravedad y dos picos en menos de 0,6 s |
+| Guardar el historial reescribía todas las preferencias | Un solo `guardar()` para todo | `guardarHistorial` y `guardarTiradas` escriben sólo su clave |
+
+**Lo que aprendimos.** Las apps que la gente paga no se diferencian en tirar dados (eso lo hace
+cualquiera) sino en **todo lo que ahorra pasos entre tirada y tirada**: repetir, guardar, elegir
+ventaja sin abrir un menú. Copiar sus pantallas no sirve; copiar sus atajos, sí.
+
+**De acá salió…** la idea de "tiradas por personaje" (agrupar las guardadas por ficha) y de
+compartir una tirada del historial con el grupo.
+
+---
+
 ## Patrones que se repitieron
 
 1. **Imitar lo que haría una persona.** Verter de a poco, golpear la torre, empujar un dado montado,
@@ -456,6 +498,7 @@ Lanzador de un dado ──► muchos dados + reglas de rol
                     └─► torres más lindas ──► ambiente, luz, aberturas medievales
 
 Investigación de apps pagas ──► mesa a pantalla completa (interfaz superpuesta, hojas, inmersivo)
+        └─► sus atajos ──► historial, "otra vez", guardadas, ventaja con pulsación larga, agitar, voz
 ```
 
 ## Ideas pendientes (de dónde salieron)
@@ -470,6 +513,9 @@ Investigación de apps pagas ──► mesa a pantalla completa (interfaz superp
 | Packs de skins / sets de dados (gratis el núcleo, pagos los sets, como DiceShaker y D&D Beyond) | Capítulo 12 (investigación de competencia). |
 | Tiradas guardadas por personaje e historial, como Dice by PCalc | Capítulo 12 y fase 4 del plan. |
 | "Modo vitrina" sin interfaz y con cámara lenta para grabar el video promocional | Capítulo 12 (videos de la competencia). |
+| Dados con caras personalizadas (texto, emoji, imagen), como Dice by PCalc | Capítulo 13 (dejado afuera). |
+| Estadísticas de equidad de los propios dados, como DiceShaker | Capítulo 13 (dejado afuera). |
+| Tiradas agrupadas por personaje y compartir una tirada con el grupo | Capítulo 13. |
 
 ---
 
