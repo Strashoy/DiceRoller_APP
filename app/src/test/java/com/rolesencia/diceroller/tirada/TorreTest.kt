@@ -28,7 +28,7 @@ class TorreTest {
                     val modelo = ModelosTorre.construir(id, m)
                     val motor = MotorFisicoPropio(semilla = semilla)
                     val sim = SimulacionTirada(
-                        dados, GeneradorLanzamiento.impulsosTorre(dados, modelo, Random(semilla)), emptyList(), m, semilla,
+                        dados, GeneradorLanzamiento.impulsosTorre(dados, modelo, Random(semilla), alturaEntrada = modelo.alturaCaida + ENTRADA_SOBRE_BOCA), emptyList(), m, semilla,
                         motor = motor, escenario = modelo.escenarioFisico()
                     )
                     while (!sim.terminada) sim.paso()
@@ -54,10 +54,16 @@ class TorreTest {
         for (id in ModelosTorre.ids) {
             val modelo = ModelosTorre.construir(id, m)
             val deseados = dados.associate { it.id to it.tipo.valoresCaras.random(random) }
-            val sim = SimulacionTirada(dados, GeneradorLanzamiento.impulsosTorre(dados, modelo, Random(1)), emptyList(), m, 1, escenario = modelo.escenarioFisico())
+            val sim = SimulacionTirada(dados, GeneradorLanzamiento.impulsosTorre(dados, modelo, Random(1), alturaEntrada = modelo.alturaCaida + ENTRADA_SOBRE_BOCA), emptyList(), m, 1, escenario = modelo.escenarioFisico())
             val sesion = SesionResultadoPredeterminado(dados, PreSimulador.grabar(sim), deseados, random)
             while (!sesion.terminada) sesion.avanzar(1f / 60f)
             sesion.estadoFinal().forEach { assertEquals(deseados[it.dado.id], LectorCara.leer(it.dado.tipo, it.orientacion, it.apoyo).valor) }
         }
     }
 }
+
+/**
+ * Los dados se sueltan por encima del borde de la pantalla: en un teléfono típico eso queda unos
+ * 14 cm sobre la boca de la torre. Se prueba con algo más para tener margen.
+ */
+private const val ENTRADA_SOBRE_BOCA = 18f

@@ -72,6 +72,8 @@ class DiceRollerViewModel(
     private val acumulados = ArrayList<ResultadoDado>()
     private var ultimaVibracion = 0L
     private var proporcionMesa = 1.2f
+    /** Altura (cm) desde la que se sueltan los dados en cada torre, informada por la mesa 3D. */
+    private val alturasEntrada = HashMap<String, Float>()
 
     init {
         viewModelScope.launch {
@@ -291,6 +293,11 @@ class DiceRollerViewModel(
         guardar()
     }
 
+    /** La mesa 3D informa desde qué altura un dado queda fuera de la pantalla, sobre la torre. */
+    fun actualizarAlturaEntrada(idTorre: String, altura: Float) {
+        alturasEntrada[idTorre] = altura
+    }
+
     /** La mesa 3D informa su proporción; la bandeja física se adapta a ella y a la cantidad de dados. */
     fun actualizarProporcionMesa(altoSobreAncho: Float) {
         if (abs(proporcionMesa - altoSobreAncho) < 0.01f) return
@@ -417,7 +424,9 @@ class DiceRollerViewModel(
         val semilla = Random.nextLong()
         // Con torre los dados se sueltan por arriba y la torre es parte del escenario físico.
         val torre = s.modeloTorre?.let { ModelosTorre.construir(it, s.mesa) }
-        val impulsos = if (torre != null) GeneradorLanzamiento.impulsosTorre(dados, torre, Random(semilla))
+        val impulsos = if (torre != null) GeneradorLanzamiento.impulsosTorre(
+            dados, torre, Random(semilla), alturasEntrada[torre.id] ?: torre.alturaCaida
+        )
         else GeneradorLanzamiento.impulsos(dados, s.mesa, gesto, Random(semilla))
         val simulacion = SimulacionTirada(dados, impulsos, obstaculos, s.mesa, semilla, escenario = torre?.escenarioFisico())
         when (s.modo) {

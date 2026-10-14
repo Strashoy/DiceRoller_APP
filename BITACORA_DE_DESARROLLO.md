@@ -464,6 +464,49 @@ compartir una tirada con el grupo); están en
 
 ---
 
+## Capítulo 14 · Los dados entran cayendo desde fuera de la pantalla
+
+**El pedido.** "Necesito ahora que los dados caigan desde la parte más arriba del celular. Que
+realmente parezcan que caen por encima de lo que se ve y no que se 'popeen' de la nada. Actualmente
+inician su caída desde dentro de las torres."
+
+**Por qué pasaba.** Cada dado entraba a la simulación en su turno de vertido, ya ubicado dentro de
+la torre (a la altura de la boca, entre 16,5 y 26 cm). Antes de ese instante no existía, así que
+aparecía de golpe.
+
+**La solución.** La altura desde la que se suelta cada dado ya no es fija: la calcula la mesa 3D
+con **la misma cámara con la que dibuja**.
+
+- `alturaFueraDeCuadro` sube de a medio centímetro desde la boca de la torre hasta encontrar la
+  altura en la que el punto más bajo del dado queda **por encima del borde superior del lienzo**,
+  en los dos puntos de vertido.
+- La mesa avisa esa altura (`onAlturaEntrada`), el ViewModel la guarda por torre y
+  `GeneradorLanzamiento.impulsosTorre(…, alturaEntrada)` suelta los dados desde ahí. Nunca es menor
+  que la boca, nunca llega al techo físico.
+- Como la caída es física (no una animación aparte), el modo predeterminado la pre-simula igual
+  que el resto de la tirada.
+
+En un Samsung A33 (1080 × 2400), el castillo necesita soltar los dados a 40 cm, 14 cm sobre la boca.
+Grabando la pantalla se ve el dado asomar por el borde, pasar detrás de la barra superior, caer
+sobre las almenas, verse por las ventanas y salir por la puerta.
+
+**Problemas y soluciones.**
+
+| Problema | Causa | Solución |
+|---|---|---|
+| ¿Caer desde más alto traba la torre? | Los dados llegan más rápido a la primera rampa. | Se midió con `TorreTest` soltándolos 18 cm sobre la boca: ningún dado forzado ni trabado en las tres torres. Con 20 dados las tiradas fueron incluso más cortas (madera: 4,1 s de media contra 5,7 s antes), porque los dados llegan más separados entre sí. |
+| La altura depende de cada pantalla | Proporción del teléfono, barras de la interfaz y tamaño de la bandeja cambian el encuadre. | Se recalcula cada vez que cambian el tamaño, el área útil, la torre o la mesa. |
+| Las capturas sueltas no alcanzaban a mostrar la caída | Una captura por adb tarda medio segundo. | Se grabó la pantalla (`screenrecord`) y se extrajeron cuadros cada 0,1 s con ffmpeg. |
+
+**Lo que aprendimos.** Para que algo "entre en cuadro" de forma natural, la física no tiene que
+saber de pantallas: alcanza con que la vista le diga **desde dónde ya no se ve**, usando la misma
+cámara con la que dibuja.
+
+**De acá salió…** que en la bandeja los dados todavía aparecen de golpe junto al borde cercano (no
+se cambió en este capítulo).
+
+---
+
 ## Patrones que se repitieron
 
 1. **Imitar lo que haría una persona.** Verter de a poco, golpear la torre, empujar un dado montado,
@@ -502,6 +545,8 @@ Lanzador de un dado ──► muchos dados + reglas de rol
                                                                 └─► color distinto en la cenital ──► reflejos vs. luz difusa
                     ┌───────────────────────────────────────────┘
                     └─► torres más lindas ──► ambiente, luz, aberturas medievales
+                                │
+                                └─► dados que aparecen de golpe ──► entrada desde fuera de la pantalla
 
 Investigación de apps pagas ──► mesa a pantalla completa (interfaz superpuesta, hojas, inmersivo)
         └─► sus atajos ──► historial, "otra vez", guardadas, ventaja con pulsación larga, agitar, voz
@@ -515,6 +560,7 @@ Investigación de apps pagas ──► mesa a pantalla completa (interfaz superp
 | Girar los números en la cenital para que se lean derechos | Capítulo 9 (algunos números quedan de cabeza). |
 | Atenuar la torre del castillo en la cenital (queda muy cerca de la cámara) | Capítulo 11. |
 | Otras aberturas para el cuero (ojos de buey con aro de latón, calado, escudo) | Capítulo 11 (opciones no elegidas). |
+| Que en la bandeja los dados también entren desde fuera de la pantalla | Capítulo 14. |
 
 Las ideas que salieron de la investigación de la competencia están en
 [INVESTIGACION_COMPETENCIA.md](INVESTIGACION_COMPETENCIA.md) §4.

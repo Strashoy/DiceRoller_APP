@@ -36,6 +36,7 @@ import com.rolesencia.diceroller.fisica.Vec3
 import com.rolesencia.diceroller.tirada.torre.ModeloTorre
 import com.rolesencia.diceroller.sensorial.MaterialMesa
 import com.rolesencia.diceroller.tirada.ConfigMesa
+import com.rolesencia.diceroller.tirada.GeneradorLanzamiento
 import com.rolesencia.diceroller.tirada.DadoVisual
 import com.rolesencia.diceroller.tirada.FrameMesa
 import com.rolesencia.diceroller.tirada.Gesto
@@ -75,7 +76,12 @@ fun MesaDados3D(
      * dibuja a sangre en todo el lienzo, pero la cámara encuadra la bandeja y el resultado dentro
      * del área que queda libre, para que ningún dado quede escondido detrás de un botón.
      */
-    areaUtil: PaddingValues = PaddingValues()
+    areaUtil: PaddingValues = PaddingValues(),
+    /**
+     * Con torre: avisa desde qué altura (cm) un dado soltado sobre la boca queda entero por encima
+     * del borde superior de la pantalla. Así los dados entran cayendo desde fuera de cuadro.
+     */
+    onAlturaEntrada: (String, Float) -> Unit = { _, _ -> }
 ) {
     var dibujo by remember { mutableStateOf(dadosQuietos) }
     val escena = remember(modelo) { modelo?.let { EscenaTorre(it) } }
@@ -98,6 +104,15 @@ fun MesaDados3D(
         val w = tamano.width - izq - der
         val h = tamano.height - arr - aba
         if (w > 0f && h > 0f) proporcion(h / w)
+    }
+
+    val alturaEntrada by rememberUpdatedState(onAlturaEntrada)
+    LaunchedEffect(tamano, izq, arr, der, aba, modelo, escena, mesa) {
+        val m = modelo ?: return@LaunchedEffect
+        val e = escena ?: return@LaunchedEffect
+        if (tamano.width <= 0 || tamano.height <= 0) return@LaunchedEffect
+        val camara = camaraGeneral(e, mesa, tamano.width.toFloat(), tamano.height.toFloat(), izq, arr, der, aba)
+        alturaEntrada(m.id, alturaFueraDeCuadro(camara, m))
     }
 
     LaunchedEffect(dadosQuietos, sesion) { if (sesion == null) dibujo = dadosQuietos }
@@ -199,8 +214,8 @@ fun MesaDados3D(
                 camara = Camara(mezcla(ojoGeneral, ojoCenital, t), mezcla(miraGeneral, centro, t))
                 camara.ajustarEntre(general, 6f, resultado, 0f, anchoUtil, altoUtil, t, izq, arr)
             } else {
-                camara = Camara(ojoGeneral, miraGeneral)
-                camara.ajustar(general, anchoUtil, altoUtil, margen = 6f, x0 = izq, y0 = arr)
+                camara = if (escena != null) camaraGeneral(escena, mesa, size.width, size.height, izq, arr, der, aba)
+                else Camara(ojoGeneral, miraGeneral).also { it.ajustar(general, anchoUtil, altoUtil, margen = 6f, x0 = izq, y0 = arr) }
             }
             if (escena != null) {
                 dibujarConTorre(escena, camara, dibujo, destacados, pintor, vineta = 1f - t)
@@ -217,6 +232,38 @@ fun MesaDados3D(
 }
 
 private fun mezcla(a: Vec3, b: Vec3, t: Float) = a + (b - a) * t
+
+/** Cámara de la vista general con torre, encuadrada en el área útil (la misma del dibujo). */
+private fun camaraGeneral(
+    escena: EscenaTorre, mesa: ConfigMesa, ancho: Float, alto: Float, izq: Float, arr: Float, der: Float, aba: Float
+): Camara {
+    val mx = mesa.ancho / 2f
+    val mz = mesa.profundidad / 2f
+    val piso = listOf(Vec3(-mx, 0f, -mz), Vec3(mx, 0f, -mz), Vec3(mx, 0f, mz), Vec3(-mx, 0f, mz))
+    return Camara(Vec3(0f, 30f, mz + 26f), Vec3(0f, 8f, -mz * 0.3f)).also {
+        it.ajustar(escena.vertices + piso, (ancho - izq - der).coerceAtLeast(1f), (alto - arr - aba).coerceAtLeast(1f), margen = 6f, x0 = izq, y0 = arr)
+    }
+}
+
+/**
+ * Menor altura desde la que un dado, soltado sobre la boca de la torre, queda **entero** por encima
+ * del borde superior del lienzo (y < 0 en pantalla). Se prueba el punto más bajo del dado en los dos
+ * puntos de vertido; si ni el techo alcanza, se usa el techo.
+ */
+private fun alturaFueraDeCuadro(camara: Camara, modelo: ModeloTorre): Float {
+    val radio = 1.6f
+    val techo = modelo.altoTecho - 3f
+    var y = modelo.alturaCaida
+    val puntos = GeneradorLanzamiento.puntosDeCaida(modelo)
+    while (y < techo) {
+        val oculto = puntos.all { p ->
+            camara.proyectar(Vec3(p.x, y - radio, p.z)).y < -camara.tamanoEnPantalla(Vec3(p.x, y, p.z), radio * 0.2f)
+        }
+        if (oculto) return y
+        y += 0.5f
+    }
+    return techo
+}
 
 /**
  * Rectángulo del piso que encuadra el resultado: encierra a los dados (con un tamaño mínimo), tiene

@@ -62,20 +62,32 @@ object GeneradorLanzamiento {
      * Torre de dados: los dados se vierten **de a uno**, alternando dos puntos sobre el primer
      * escalón, cada uno [INTERVALO_VERTIDO] segundos después del anterior, como cuando se vuelcan
      * de la mano. Así no llegan todos juntos a la salida y no se forma un tapón.
+     *
+     * [alturaEntrada] es desde dónde se sueltan: la mesa 3D la calcula para que el dado arranque
+     * **por encima del borde de la pantalla** y se lo vea entrar cayendo, no aparecer de golpe.
+     * Nunca es menor que [ModeloTorre.alturaCaida] (la boca de la torre).
      */
-    fun impulsosTorre(dados: List<DadoEnMesa>, modelo: ModeloTorre, random: Random): List<ImpulsoLanzamiento> {
-        val z = modelo.zonaCaida
-        val puntos = listOf(Vec3(z[0], 0f, z[1]), Vec3(z[0] + 1.6f, 0f, z[3]))
+    fun impulsosTorre(
+        dados: List<DadoEnMesa>, modelo: ModeloTorre, random: Random, alturaEntrada: Float = modelo.alturaCaida
+    ): List<ImpulsoLanzamiento> {
+        val puntos = puntosDeCaida(modelo)
+        val altura = alturaEntrada.coerceIn(modelo.alturaCaida, modelo.altoTecho - 3f)
         return dados.mapIndexed { i, _ ->
             val p = puntos[i % 2]
             ImpulsoLanzamiento(
-                posicion = Vec3(p.x + ruido(random, 0.3f), modelo.alturaCaida + ruido(random, 0.3f), p.z + ruido(random, 0.3f)),
+                posicion = Vec3(p.x + ruido(random, 0.3f), altura + ruido(random, 0.3f), p.z + ruido(random, 0.3f)),
                 orientacion = orientacionAleatoria(random),
                 velocidadLineal = Vec3(ruido(random, 8f), -15f - random.nextFloat() * 15f, ruido(random, 5f)),
                 velocidadAngular = Vec3(ruido(random, 20f), ruido(random, 20f), ruido(random, 20f)),
                 retardo = i * INTERVALO_VERTIDO + random.nextFloat() * 0.03f
             )
         }
+    }
+
+    /** Los dos puntos (x, z) sobre la boca de la torre donde se alternan los dados al verterlos. */
+    fun puntosDeCaida(modelo: ModeloTorre): List<Vec3> {
+        val z = modelo.zonaCaida
+        return listOf(Vec3(z[0], 0f, z[1]), Vec3(z[0] + 1.6f, 0f, z[3]))
     }
 
     /** Cómo se ven los dados antes de lanzar: en fila sobre el borde cercano, con el máximo arriba. */

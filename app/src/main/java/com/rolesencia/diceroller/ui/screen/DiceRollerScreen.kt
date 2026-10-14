@@ -175,6 +175,7 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
             onSesionTerminada = viewModel::onSesionTerminada,
             onGesto = viewModel::lanzar,
             onProporcion = viewModel::actualizarProporcionMesa,
+            onAlturaEntrada = viewModel::actualizarAlturaEntrada,
             modifier = Modifier.fillMaxSize(),
             modelo = torre,
             areaUtil = areaUtil
