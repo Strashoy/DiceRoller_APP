@@ -40,18 +40,26 @@ class Camara(val ojo: Vec3, objetivo: Vec3) {
     /** Tamaño en píxeles de un objeto de [radio] cm a la distancia de [p]. */
     fun tamanoEnPantalla(p: Vec3, radio: Float): Float = escala * radio / profundidad(p).coerceAtLeast(0.1f)
 
-    fun ajustar(puntos: List<Vec3>, ancho: Float, alto: Float, margen: Float) {
-        fijar(encuadre(puntos, ancho, alto, margen))
+    /**
+     * Encuadra [puntos] en un rectángulo de [ancho] × [alto] px cuya esquina superior izquierda está
+     * en ([x0], [y0]). Con la mesa a pantalla completa, ese rectángulo es el "área útil": lo que no
+     * tapan las barras superpuestas.
+     */
+    fun ajustar(puntos: List<Vec3>, ancho: Float, alto: Float, margen: Float, x0: Float = 0f, y0: Float = 0f) {
+        fijar(encuadre(puntos, ancho, alto, margen, x0, y0))
     }
 
     /**
      * Pasa de encuadrar [desde] a encuadrar [hasta] (fracción [t]): escala y centro se mezclan, así
      * el zoom acompaña al movimiento de la cámara sin saltos.
      */
-    fun ajustarEntre(desde: List<Vec3>, margenDesde: Float, hasta: List<Vec3>, margenHasta: Float, ancho: Float, alto: Float, t: Float) {
-        val a = encuadre(desde, ancho, alto, margenDesde)
+    fun ajustarEntre(
+        desde: List<Vec3>, margenDesde: Float, hasta: List<Vec3>, margenHasta: Float,
+        ancho: Float, alto: Float, t: Float, x0: Float = 0f, y0: Float = 0f
+    ) {
+        val a = encuadre(desde, ancho, alto, margenDesde, x0, y0)
         if (t <= 0f) return fijar(a)
-        val b = encuadre(hasta, ancho, alto, margenHasta)
+        val b = encuadre(hasta, ancho, alto, margenHasta, x0, y0)
         fijar(Encuadre(a.escala + (b.escala - a.escala) * t, a.cx + (b.cx - a.cx) * t, a.cy + (b.cy - a.cy) * t))
     }
 
@@ -63,13 +71,13 @@ class Camara(val ojo: Vec3, objetivo: Vec3) {
         cy = e.cy
     }
 
-    private fun encuadre(puntos: List<Vec3>, ancho: Float, alto: Float, margen: Float): Encuadre {
+    private fun encuadre(puntos: List<Vec3>, ancho: Float, alto: Float, margen: Float, x0: Float, y0: Float): Encuadre {
         val crudos = puntos.map { cruda(it) }
         val minX = crudos.minOf { it.x }
         val maxX = crudos.maxOf { it.x }
         val minY = crudos.minOf { it.y }
         val maxY = crudos.maxOf { it.y }
         val e = minOf((ancho - 2 * margen) / (maxX - minX), (alto - 2 * margen) / (maxY - minY))
-        return Encuadre(e, ancho / 2f - e * (minX + maxX) / 2f, alto / 2f - e * (minY + maxY) / 2f)
+        return Encuadre(e, x0 + ancho / 2f - e * (minX + maxX) / 2f, y0 + alto / 2f - e * (minY + maxY) / 2f)
     }
 }

@@ -44,7 +44,8 @@ data class PreferenciasGuardadas(
     val skinsDelSistema: Boolean,
     val audioHabilitado: Boolean,
     val vibracionHabilitada: Boolean,
-    val pantallaEncendida: Boolean
+    val pantallaEncendida: Boolean,
+    val pantallaCompleta: Boolean = true
 )
 
 class GestorPreferencias(private val context: Context) {
@@ -64,6 +65,7 @@ class GestorPreferencias(private val context: Context) {
         val AUDIO = booleanPreferencesKey("audio_habilitado")
         val VIBRACION = booleanPreferencesKey("vibracion_habilitada")
         val PANTALLA = booleanPreferencesKey("pantalla_encendida")
+        val PANTALLA_COMPLETA = booleanPreferencesKey("pantalla_completa")
         const val SIN_OBJETIVO = Int.MIN_VALUE
     }
 
@@ -89,7 +91,8 @@ class GestorPreferencias(private val context: Context) {
                 skinsDelSistema = p[SKINS_SISTEMA] ?: true,
                 audioHabilitado = p[AUDIO] ?: true,
                 vibracionHabilitada = p[VIBRACION] ?: true,
-                pantallaEncendida = p[PANTALLA] ?: true
+                pantallaEncendida = p[PANTALLA] ?: true,
+                pantallaCompleta = p[PANTALLA_COMPLETA] ?: true
             )
         }
 
@@ -109,6 +112,7 @@ class GestorPreferencias(private val context: Context) {
             p[AUDIO] = prefs.audioHabilitado
             p[VIBRACION] = prefs.vibracionHabilitada
             p[PANTALLA] = prefs.pantallaEncendida
+            p[PANTALLA_COMPLETA] = prefs.pantallaCompleta
         }
     }
 }

@@ -93,7 +93,8 @@ class DiceRollerViewModel(
                     materialMesa = prefs.materialMesa,
                     audioHabilitado = prefs.audioHabilitado,
                     vibracionHabilitada = prefs.vibracionHabilitada,
-                    pantallaEncendida = prefs.pantallaEncendida
+                    pantallaEncendida = prefs.pantallaEncendida,
+                    pantallaCompleta = prefs.pantallaCompleta
                 )
             }
         }
@@ -117,7 +118,8 @@ class DiceRollerViewModel(
                     skinsDelSistema = s.skinsDelSistema,
                     audioHabilitado = s.audioHabilitado,
                     vibracionHabilitada = s.vibracionHabilitada,
-                    pantallaEncendida = s.pantallaEncendida
+                    pantallaEncendida = s.pantallaEncendida,
+                    pantallaCompleta = s.pantallaCompleta
                 )
             )
         }
@@ -290,6 +292,11 @@ class DiceRollerViewModel(
 
     fun toggleVibracion() {
         _uiState.update { it.copy(vibracionHabilitada = !it.vibracionHabilitada) }
+        guardar()
+    }
+
+    fun togglePantallaCompleta() {
+        _uiState.update { it.copy(pantallaCompleta = !it.pantallaCompleta) }
         guardar()
     }
 

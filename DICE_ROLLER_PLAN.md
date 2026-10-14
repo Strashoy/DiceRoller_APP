@@ -50,7 +50,7 @@ app/src/main/java/com/rolesencia/diceroller/
     │                               DibujoTorre: torre en baldosas ordenadas junto con los dados
     ├── components/SolapaDados.kt   Solapa lateral (deslizar desde el borde derecho) con los dados en 3D
     ├── skins/                      Selector de skins y creador (ver SKINS.md)
-    ├── components/                 Apartados de cada modo, resumen de dados, controles
+    ├── components/                 Hojas inferiores (sistema, tirada, ajustes), fila de fichas, apartados de cada modo
     └── screen/, viewmodel/, theme/
 
 app/src/test/…                      38 tests: reglas, mallas y simetrías, ambos modos, determinismo,
@@ -167,6 +167,7 @@ Las dos dependencias 3D ya están declaradas en `gradle/libs.versions.toml` y **
 | 2 | Mallas reales de los 8 dados, motor físico propio, mesa 3D en Canvas, lectura de caras real, foley por contacto, **modo física real** y **modo resultado predeterminado**, lanzamiento por gesto, resaltado de dados que cuentan, explosiones en 3D | ✅ esta entrega |
 | 3 | Lanzar agitando el teléfono; pre-simular al apoyar el dedo para ocultar la latencia del modo 2; optimizar asignaciones del motor | ⏳ |
 | 4 | Historial de tiradas (Room), presets por personaje, sistema personalizado, accesibilidad (anuncio del veredicto con TalkBack) | ⏳ |
+| 4b | **Interfaz a pantalla completa**: mesa a sangre, barras superpuestas con área útil para la cámara, hojas inferiores, modo inmersivo (bitácora, cap. 12) | ✅ |
 | 5 | Pulido: modelos glTF + SceneView (PBR), materiales de dados, optimización en gama baja, publicación | ⏳ |
 
 ## 8. Fuentes consultadas

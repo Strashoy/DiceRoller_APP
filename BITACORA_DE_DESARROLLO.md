@@ -346,6 +346,77 @@ ahorra iteraciones.
 
 ---
 
+## Capítulo 12 · La mesa a pantalla completa
+
+**El pedido.** "Para empezar, sólo la interfaz adecuada a lo que esperan los usuarios mobile de una
+aplicación con gran gráfico que ocupa toda la pantalla", usando las buenas prácticas de Google y lo
+que la competencia paga demostró que funciona. Antes, la mesa era un recuadro de 400 dp dentro de una
+página con scroll, con todos los controles apilados debajo.
+
+**Qué hace la competencia.** Se revisaron las apps de dados que la gente paga (Dice by PCalc,
+D&D Beyond con sus sets de dados 3D, dddice, DiceShaker 3D) y sus videos promocionales. Coinciden en
+tres cosas: (1) **los dados son el protagonista y ocupan la pantalla**; (2) los controles son pocos,
+están abajo y se apartan mientras ruedan; (3) el resultado se anuncia grande y con color, como un
+marcador de juego. Lo que venden (sets, skins, física realista) se luce sólo si la mesa se ve entera.
+
+**La solución.**
+
+- **Mesa a sangre** (`MesaDados3D` con `fillMaxSize`) y la interfaz **superpuesta** encima, sobre
+  degradés oscuros que garantizan la lectura sin tapar la mesa con paneles opacos.
+- **Área útil**: la cámara (`Camara.ajustar(…, x0, y0)`) encuadra la bandeja, la torre y la toma
+  cenital del resultado **dentro del rectángulo que no tapan las barras**, medido con
+  `onSizeChanged`. La profundidad de la bandeja sigue la proporción de esa área. El fondo (halo
+  cálido para la bandeja, ambiente para las torres) se dibuja igual en toda la pantalla.
+- **Arriba**: píldoras translúcidas con el **sistema de juego** y **dónde se lanza** (bandeja o torre,
+  en un menú), y el engranaje de **ajustes**. Debajo, el **marcador**: el veredicto en 30 sp con el
+  color de su nivel; antes de tirar, una pista de uso ("Deslizá el dedo sobre la mesa…").
+- **Abajo, en la zona del pulgar**: una fila de fichas que se desplaza de costado (no se envuelve) y
+  tres botones de 64 dp: **Tirada** (resume "+2 · CD 15 · Mayor" y abre los parámetros),
+  **LANZAR** al centro y **Dados** (abre la solapa lateral).
+- **Hojas inferiores** (`ModalBottomSheet`) en vez de diálogos y listas apiladas: *Sistema*,
+  *Tirada* y *Ajustes* (modo de decisión con botones segmentados y su explicación, superficie,
+  sonido, vibración y pantalla). Se cierran deslizando o con el "atrás" predictivo.
+- **Modo inmersivo** de Android (`BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE`), activable en Ajustes y
+  guardado en DataStore: las barras del sistema se ocultan y vuelven un instante deslizando el borde.
+- **Durante la tirada** los controles bajan a 25 % de opacidad y el marcador dice "Rodando…".
+- **Accesibilidad**: el marcador es una región "viva" (TalkBack lee cada veredicto nuevo), todos los
+  botones miden 48 dp o más y los íconos son vectores propios (Material Icons, Apache 2.0), sin sumar
+  la librería de íconos.
+
+**Pautas que se aplicaron.**
+
+| Pauta | De dónde | Cómo quedó |
+|---|---|---|
+| Edge-to-edge y respetar *insets* (barras, recorte de cámara) | Android: *Display content edge-to-edge* | Mesa detrás de todo; barras con `WindowInsets.safeDrawing` |
+| Modo inmersivo con barras transitorias para juegos | Android: *Hide system bars for immersive mode* | `ModoInmersivo`, opcional |
+| Acciones frecuentes al alcance del pulgar | Material 3: *bottom app bar*, zona de alcance | LANZAR, Tirada y Dados abajo |
+| Opciones secundarias en hojas inferiores | Material 3: *bottom sheets* | Sistema, Tirada, Ajustes |
+| Todo gesto necesita un control visible | Material 3: *gestures* | Botón "Dados" además del deslizamiento desde el borde |
+| Objetivos táctiles ≥ 48 dp | Material 3: *accessibility* | Píldoras 48 dp, botones inferiores 64 dp |
+| Resultado protagonista, interfaz que se aparta | Dice by PCalc, D&D Beyond, DiceShaker | Marcador grande; controles atenuados al rodar |
+
+**Problemas y soluciones.**
+
+| Problema | Causa | Solución |
+|---|---|---|
+| Con la mesa a pantalla completa, los dados del borde quedaban detrás de los botones | La cámara encuadraba el lienzo entero | Encuadre dentro del área útil medida (`areaUtil`) |
+| La mesa "saltaba" al aparecer el veredicto | Un panel que crece cambia el área útil | Marcador de altura fija y fichas en una sola línea con scroll horizontal |
+| Fuera de la bandeja se veía un color plano | Antes la mesa era un recuadro | Fondo con halo cálido en todo el lienzo |
+| El deslizamiento desde el borde era la única forma de agregar dados | Gesto sin control visible | `SolapaDados(solicitudApertura)` abierto desde el botón "Dados" |
+
+**Lo que aprendimos.** En una app donde el gráfico es el producto, la interfaz no se "pone debajo":
+se superpone y **le avisa al gráfico qué parte de la pantalla tapa**. Medir las barras y pasarle ese
+rectángulo a la cámara es poco código y evita toda la familia de "el dado quedó detrás del botón".
+
+**Pendiente de verificar en el dispositivo.** Este capítulo se escribió sin poder compilar (el
+entorno no tenía SDK de Android): hay que compilar, probar en un teléfono con recorte de cámara y con
+navegación por gestos, y revisar la toma cenital con las barras visibles.
+
+**De acá salió…** la base para lo que la competencia cobra: sets de dados, tiradas guardadas por
+personaje y un "modo vitrina" para grabar el video promocional, que ahora tienen dónde lucirse.
+
+---
+
 ## Patrones que se repitieron
 
 1. **Imitar lo que haría una persona.** Verter de a poco, golpear la torre, empujar un dado montado,
@@ -383,6 +454,8 @@ Lanzador de un dado ──► muchos dados + reglas de rol
                                                                 └─► color distinto en la cenital ──► reflejos vs. luz difusa
                     ┌───────────────────────────────────────────┘
                     └─► torres más lindas ──► ambiente, luz, aberturas medievales
+
+Investigación de apps pagas ──► mesa a pantalla completa (interfaz superpuesta, hojas, inmersivo)
 ```
 
 ## Ideas pendientes (de dónde salieron)
@@ -394,6 +467,9 @@ Lanzador de un dado ──► muchos dados + reglas de rol
 | Girar los números en la cenital para que se lean derechos | Capítulo 9 (algunos números quedan de cabeza). |
 | Atenuar la torre del castillo en la cenital (queda muy cerca de la cámara) | Capítulo 11. |
 | Otras aberturas para el cuero (ojos de buey con aro de latón, calado, escudo) | Capítulo 11 (opciones no elegidas). |
+| Packs de skins / sets de dados (gratis el núcleo, pagos los sets, como DiceShaker y D&D Beyond) | Capítulo 12 (investigación de competencia). |
+| Tiradas guardadas por personaje e historial, como Dice by PCalc | Capítulo 12 y fase 4 del plan. |
+| "Modo vitrina" sin interfaz y con cámara lenta para grabar el video promocional | Capítulo 12 (videos de la competencia). |
 
 ---
 

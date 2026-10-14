@@ -7,9 +7,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -18,7 +17,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
@@ -29,6 +27,9 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.rolesencia.diceroller.fisica.Poliedros
 import com.rolesencia.diceroller.fisica.Vec3
@@ -39,7 +40,6 @@ import com.rolesencia.diceroller.tirada.DadoVisual
 import com.rolesencia.diceroller.tirada.FrameMesa
 import com.rolesencia.diceroller.tirada.Gesto
 import com.rolesencia.diceroller.tirada.SesionTirada
-import com.rolesencia.diceroller.ui.theme.Ivory
 import kotlinx.coroutines.isActive
 import kotlin.math.hypot
 
@@ -69,7 +69,13 @@ fun MesaDados3D(
     onProporcion: (Float) -> Unit,
     modifier: Modifier = Modifier,
     /** Torre de dados; null = bandeja sola. */
-    modelo: ModeloTorre? = null
+    modelo: ModeloTorre? = null,
+    /**
+     * Franjas del lienzo tapadas por la interfaz superpuesta (barras, botón de lanzar…). La mesa se
+     * dibuja a sangre en todo el lienzo, pero la cámara encuadra la bandeja y el resultado dentro
+     * del área que queda libre, para que ningún dado quede escondido detrás de un botón.
+     */
+    areaUtil: PaddingValues = PaddingValues()
 ) {
     var dibujo by remember { mutableStateOf(dadosQuietos) }
     val escena = remember(modelo) { modelo?.let { EscenaTorre(it) } }
@@ -77,6 +83,22 @@ fun MesaDados3D(
     val terminada by rememberUpdatedState(onSesionTerminada)
     val contexto = LocalContext.current
     val pintor = remember { PintorDados(SimbolosLegendarios(contexto)) }
+
+    // Área útil en píxeles (izquierda, arriba, derecha, abajo).
+    val densidad = LocalDensity.current
+    val direccion = LocalLayoutDirection.current
+    val izq = with(densidad) { areaUtil.calculateLeftPadding(direccion).toPx() }
+    val arr = with(densidad) { areaUtil.calculateTopPadding().toPx() }
+    val der = with(densidad) { areaUtil.calculateRightPadding(direccion).toPx() }
+    val aba = with(densidad) { areaUtil.calculateBottomPadding().toPx() }
+    var tamano by remember { mutableStateOf(IntSize.Zero) }
+    val proporcion by rememberUpdatedState(onProporcion)
+    // La profundidad de la bandeja sigue la proporción del área útil, no la del lienzo entero.
+    LaunchedEffect(tamano, izq, arr, der, aba) {
+        val w = tamano.width - izq - der
+        val h = tamano.height - arr - aba
+        if (w > 0f && h > 0f) proporcion(h / w)
+    }
 
     LaunchedEffect(dadosQuietos, sesion) { if (sesion == null) dibujo = dadosQuietos }
 
@@ -121,7 +143,7 @@ fun MesaDados3D(
         Canvas(
             Modifier
                 .fillMaxSize()
-                .onSizeChanged { if (it.width > 0) onProporcion(it.height.toFloat() / it.width) }
+                .onSizeChanged { tamano = it }
                 .pointerInput(Unit) {
                     // Se capturan los toques en la pasada inicial: la mesa se queda con el gesto
                     // y la página no se desplaza mientras se "agita" la mano sobre ella.
@@ -156,6 +178,8 @@ fun MesaDados3D(
             val mx = mesa.ancho / 2f
             val mz = mesa.profundidad / 2f
             val t = vistaResultado.value
+            val anchoUtil = (size.width - izq - der).coerceAtLeast(1f)
+            val altoUtil = (size.height - arr - aba).coerceAtLeast(1f)
             val piso = listOf(Vec3(-mx, 0f, -mz), Vec3(mx, 0f, -mz), Vec3(mx, 0f, mz), Vec3(-mx, 0f, mz))
             val general = if (escena != null) escena.vertices + piso else listOf(
                 Vec3(-mx, ALTO_PARED, -mz), Vec3(mx, ALTO_PARED, -mz), Vec3(-mx, 0f, mz), Vec3(mx, 0f, mz),
@@ -165,7 +189,7 @@ fun MesaDados3D(
             val miraGeneral = if (escena != null) Vec3(0f, 8f, -mz * 0.3f) else Vec3(0f, 0f, 1f)
             val camara: Camara
             if (t > 0f && dibujo.isNotEmpty()) {
-                val resultado = encuadreResultado(dibujo, size.height / size.width, mx, mz)
+                val resultado = encuadreResultado(dibujo, altoUtil / anchoUtil, mx, mz)
                 val centro = Vec3(
                     resultado.sumOf { it.x.toDouble() }.toFloat() / resultado.size, 0f,
                     resultado.sumOf { it.z.toDouble() }.toFloat() / resultado.size
@@ -173,27 +197,22 @@ fun MesaDados3D(
                 // Casi cenital: una pizca de inclinación conserva "arriba" de la pantalla = fondo de la mesa.
                 val ojoCenital = centro + Vec3(0f, ALTO_CENITAL, 0.4f)
                 camara = Camara(mezcla(ojoGeneral, ojoCenital, t), mezcla(miraGeneral, centro, t))
-                camara.ajustarEntre(general, 6f, resultado, 0f, size.width, size.height, t)
+                camara.ajustarEntre(general, 6f, resultado, 0f, anchoUtil, altoUtil, t, izq, arr)
             } else {
                 camara = Camara(ojoGeneral, miraGeneral)
-                camara.ajustar(general, size.width, size.height, margen = 6f)
+                camara.ajustar(general, anchoUtil, altoUtil, margen = 6f, x0 = izq, y0 = arr)
             }
             if (escena != null) {
                 dibujarConTorre(escena, camara, dibujo, destacados, pintor, vineta = 1f - t)
                 return@Canvas
             }
+            dibujarFondoBandeja(arr + altoUtil / 2f)
             dibujarBandeja(camara, mx, mz, material)
             val ordenados = dibujo.sortedByDescending { camara.profundidad(it.posicion) }
             ordenados.forEach { pintor.dibujarSombra(this, camara, it) }
             ordenados.forEach { pintor.dibujarDado(this, camara, it, it.dado.id in destacados) }
         }
-        if (preparando) {
-            Text(
-                "Pre-simulando la tirada…",
-                color = Ivory,
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp)
-            )
-        }
+        // El aviso de "pre-simulando" lo muestra la pantalla, en la zona de estado de la interfaz.
     }
 }
 
@@ -223,6 +242,22 @@ private fun encuadreResultado(dados: List<DadoVisual>, proporcion: Float, mx: Fl
     val cx = dentro((x0 + x1) / 2f, hx, mx)
     val cz = dentro((z0 + z1) / 2f, hz, mz)
     return listOf(Vec3(cx - hx, 0f, cz - hz), Vec3(cx + hx, 0f, cz - hz), Vec3(cx - hx, 0f, cz + hz), Vec3(cx + hx, 0f, cz + hz))
+}
+
+/**
+ * Fondo a sangre detrás de la bandeja: con la mesa a pantalla completa no debe verse un color plano
+ * en los bordes. Un halo cálido, como una lámpara sobre la mesa de juego, que se apaga hacia afuera.
+ */
+private fun DrawScope.dibujarFondoBandeja(centroY: Float) {
+    drawRect(Color(0xFF0B1520))
+    val centro = androidx.compose.ui.geometry.Offset(size.width / 2f, centroY)
+    drawRect(
+        androidx.compose.ui.graphics.Brush.radialGradient(
+            listOf(Color(0xFF2B2A28), Color(0xFF16202B), Color(0xFF0B1520)),
+            center = centro,
+            radius = maxOf(size.width, size.height) * 0.7f
+        )
+    )
 }
 
 private fun DrawScope.dibujarBandeja(camara: Camara, mx: Float, mz: Float, material: MaterialMesa) {

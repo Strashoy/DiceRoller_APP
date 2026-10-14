@@ -4,9 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -59,16 +56,5 @@ private fun Stepper(etiqueta: String, valor: String, onDelta: (Int) -> Unit, hab
         OutlinedButton(onClick = { onDelta(-1) }, enabled = habilitado) { Text("−") }
         Text(valor, fontWeight = FontWeight.Bold, fontSize = 18.sp)
         OutlinedButton(onClick = { onDelta(+1) }, enabled = habilitado) { Text("+") }
-    }
-}
-
-@Composable
-fun BotonLanzar(onLanzar: () -> Unit, estaRodando: Boolean, habilitado: Boolean) {
-    Button(
-        onClick = onLanzar,
-        enabled = habilitado && !estaRodando,
-        modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 24.dp)
-    ) {
-        Text(if (estaRodando) "Rodando…" else "LANZAR", fontSize = 22.sp, fontWeight = FontWeight.Black)
     }
 }

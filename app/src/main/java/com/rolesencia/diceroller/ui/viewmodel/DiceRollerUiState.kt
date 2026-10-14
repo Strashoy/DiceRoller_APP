@@ -72,7 +72,9 @@ data class DiceRollerUiState(
     // Ajustes (mismos que el Lanzador Legendario)
     val audioHabilitado: Boolean = true,
     val vibracionHabilitada: Boolean = true,
-    val pantallaEncendida: Boolean = true
+    val pantallaEncendida: Boolean = true,
+    /** Modo inmersivo: oculta las barras del sistema (vuelven deslizando desde el borde). */
+    val pantallaCompleta: Boolean = true
 ) {
     companion object {
         const val MAX_DADOS = 30

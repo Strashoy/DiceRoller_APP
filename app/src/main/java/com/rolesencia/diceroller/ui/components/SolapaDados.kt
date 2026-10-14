@@ -30,6 +30,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -87,7 +88,13 @@ fun SolapaDados(
     onCrearSkin: () -> Unit,
     onEditarSkin: (SkinDado) -> Unit,
     onBorrarSkin: (SkinDado) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /**
+     * Cada vez que cambia (y es > 0) la solapa se abre. Lo usa el botón "Dados" de la barra inferior:
+     * el deslizamiento desde el borde sigue funcionando, pero un gesto oculto no debe ser la única
+     * forma de llegar a una función (pauta de Material: todo gesto necesita un control visible).
+     */
+    solicitudApertura: Int = 0
 ) {
     val anchoPx = with(LocalDensity.current) { ANCHO_PANEL.toPx() }
     // Desplazamiento del panel hacia la derecha: anchoPx = cerrada, 0 = abierta.
@@ -116,6 +123,7 @@ fun SolapaDados(
     }
 
     BackHandler(enabled = progreso > 0.01f) { asentar(1000f) }
+    LaunchedEffect(solicitudApertura) { if (solicitudApertura > 0) asentar(-1000f) }
 
     Box(modifier.fillMaxSize()) {
         // Velo: oscurece el resto y cierra al tocarlo.
