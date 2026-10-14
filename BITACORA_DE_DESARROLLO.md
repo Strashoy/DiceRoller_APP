@@ -24,6 +24,7 @@ Los documentos de referencia (qué hay hoy, sin la historia) siguen existiendo:
 | [DICE_ROLLER_PLAN.md](DICE_ROLLER_PLAN.md) | Estructura del código, qué se reutilizó del proyecto anterior, mecánicas de juego investigadas y fuentes. |
 | [MODOS_DE_DECISION.md](MODOS_DE_DECISION.md) | Física, garantías de resultado, los dos modos, latencia, sonido y torres. |
 | [SKINS.md](SKINS.md) | Catálogo de skins, contraste de los números, creador y estilos. |
+| [INVESTIGACION_COMPETENCIA.md](INVESTIGACION_COMPETENCIA.md) | Apps de dados pagas, cómo se promocionan, sus patrones de interfaz e ideas todavía no implementadas. |
 | **Esta bitácora** | La historia: por qué las cosas son como son. |
 
 ---
@@ -348,16 +349,15 @@ ahorra iteraciones.
 
 ## Capítulo 12 · La mesa a pantalla completa
 
-**El pedido.** "Para empezar, sólo la interfaz adecuada a lo que esperan los usuarios mobile de una
-aplicación con gran gráfico que ocupa toda la pantalla", usando las buenas prácticas de Google y lo
-que la competencia paga demostró que funciona. Antes, la mesa era un recuadro de 400 dp dentro de una
-página con scroll, con todos los controles apilados debajo.
+**El pedido.** Primero se pidió investigar las apps de dados para rol que la gente paga y sus videos
+promocionales. Con esa investigación, el pedido fue: "Fijate si podés incorporar una solución en base
+a la investigación que hiciste". Antes, la mesa era un recuadro de 400 dp dentro de una página con
+scroll, con todos los controles apilados debajo.
 
-**Qué hace la competencia.** Se revisaron las apps de dados que la gente paga (Dice by PCalc,
-D&D Beyond con sus sets de dados 3D, dddice, DiceShaker 3D) y sus videos promocionales. Coinciden en
-tres cosas: (1) **los dados son el protagonista y ocupan la pantalla**; (2) los controles son pocos,
-están abajo y se apartan mientras ruedan; (3) el resultado se anuncia grande y con color, como un
-marcador de juego. Lo que venden (sets, skins, física realista) se luce sólo si la mesa se ve entera.
+**De la investigación se tomó** una conclusión: en esas apps los dados son el protagonista y ocupan
+la pantalla, los controles son pocos y están abajo, y el resultado se anuncia grande. El detalle
+(apps, precios, tipos de video y patrones) está en
+[INVESTIGACION_COMPETENCIA.md](INVESTIGACION_COMPETENCIA.md).
 
 **La solución.**
 
@@ -393,7 +393,7 @@ marcador de juego. Lo que venden (sets, skins, física realista) se luce sólo s
 | Opciones secundarias en hojas inferiores | Material 3: *bottom sheets* | Sistema, Tirada, Ajustes |
 | Todo gesto necesita un control visible | Material 3: *gestures* | Botón "Dados" además del deslizamiento desde el borde |
 | Objetivos táctiles ≥ 48 dp | Material 3: *accessibility* | Píldoras 48 dp, botones inferiores 64 dp |
-| Resultado protagonista, interfaz que se aparta | Dice by PCalc, D&D Beyond, DiceShaker | Marcador grande; controles atenuados al rodar |
+| Resultado protagonista, interfaz que se aparta | Investigación de competencia | Marcador grande; controles atenuados al rodar |
 
 **Problemas y soluciones.**
 
@@ -408,12 +408,14 @@ marcador de juego. Lo que venden (sets, skins, física realista) se luce sólo s
 se superpone y **le avisa al gráfico qué parte de la pantalla tapa**. Medir las barras y pasarle ese
 rectángulo a la cámara es poco código y evita toda la familia de "el dado quedó detrás del botón".
 
-**Pendiente de verificar en el dispositivo.** Este capítulo se escribió sin poder compilar (el
-entorno no tenía SDK de Android): hay que compilar, probar en un teléfono con recorte de cámara y con
-navegación por gestos, y revisar la toma cenital con las barras visibles.
+**Cómo se trabajó.** Este capítulo y el siguiente se hicieron desde claude.ai, en un entorno sin SDK
+de Android y sin permiso de escritura en GitHub: no se pudo compilar, y los cambios se entregaron
+como un parche (`git am`) que se aplicó a mano. Las capturas que acompañaron la propuesta eran
+simulaciones en HTML, no capturas reales. Después de aplicar el parche, el proyecto **compiló y
+pasaron los 60 tests**. Queda por probar en el teléfono: recorte de cámara, navegación por gestos y
+la toma cenital con las barras visibles.
 
-**De acá salió…** la base para lo que la competencia cobra: sets de dados, tiradas guardadas por
-personaje y un "modo vitrina" para grabar el video promocional, que ahora tienen dónde lucirse.
+**De acá salió…** el pedido de sumar los atajos de interacción de esas mismas apps (capítulo 13).
 
 ---
 
@@ -421,25 +423,23 @@ personaje y un "modo vitrina" para grabar el video promocional, que ahora tienen
 
 **El pedido.** "Incorporá las mejores prácticas de UI e interacción del resto de las apps de dados."
 
-**Qué se tomó y de dónde.** Se eligieron los patrones que se repiten en varias apps pagas (no los
-de una sola), y que encajan con una mesa a pantalla completa:
+**La solución.** Se tomaron los patrones que se repiten en varias apps pagas (cuáles y en qué apps:
+[INVESTIGACION_COMPETENCIA.md](INVESTIGACION_COMPETENCIA.md) §3) y que encajan con una mesa a
+pantalla completa:
 
-| Práctica | Quién la usa | Cómo quedó en Dice Roller |
-|---|---|---|
-| **Historial** de tiradas con resultado | Dice by PCalc (roll history), D&D Beyond (game log), Dice Roller PRO+ | Hoja "Historial": notación, valores, veredicto con su color y hace cuánto. Guarda las últimas 50 |
-| **"Otra vez"**: repetir una tirada | D&D Beyond, Roll20 | Botón en cada entrada: restaura sistema, dados y parámetros, y lanza |
-| **Tiradas guardadas** con nombre | Dice by PCalc (presets), Dice Roller PRO+ | Pestaña "Guardadas": "Espada larga" se guarda una vez y se lanza con un toque |
-| **Notación de dados** (1d20 + 2d8 + 5) | Roll20, D&D Beyond, dddice | En el marcador (antes de tirar), el historial y las guardadas |
-| **Ventaja / desventaja de un gesto** | D&D Beyond (menú del botón de tirada), PCalc | Mantener LANZAR: ventaja, desventaja o normal, y lanza. En D&D agrega o quita el segundo d20 solo. El botón avisa "con ventaja" |
-| **Agitar para lanzar** | DiceShaker, la mayoría de los lanzadores móviles | Acelerómetro: dos picos fuertes seguidos lanzan; 1,5 s de espera; desactivable |
-| **Leer el resultado en voz alta** | Dice by PCalc (speech) | TextToSpeech en español (rioplatense si el motor lo tiene), desactivado por defecto |
-| **Deshacer** | Pauta de Material (snackbar con acción) | Quitar un dado con pulsación larga muestra "Quitaste un d8 · Deshacer" |
-| **Pistas que se retiran solas** | Onboarding de juegos móviles | Las tres primeras tiradas el marcador enseña los gestos; después muestra la notación |
+| Atajo | Cómo quedó en Dice Roller |
+|---|---|
+| **Historial** de tiradas | Hoja "Historial": notación, valores, veredicto con su color y hace cuánto. Guarda las últimas 50 |
+| **"Otra vez"** | Botón en cada entrada: restaura sistema, dados y parámetros, y lanza |
+| **Tiradas guardadas** con nombre | Pestaña "Guardadas": "Espada larga" se guarda una vez y se lanza con un toque |
+| **Notación de dados** (1d20 + 2d8 + 5) | En el marcador (antes de tirar), el historial y las guardadas |
+| **Ventaja / desventaja de un gesto** | Mantener LANZAR: ventaja, desventaja o normal, y lanza. En D&D agrega o quita el segundo d20 solo. El botón avisa "con ventaja" |
+| **Agitar para lanzar** | Acelerómetro: dos picos fuertes seguidos lanzan; 1,5 s de espera; desactivable |
+| **Leer el resultado en voz alta** | TextToSpeech en español (rioplatense si el motor lo tiene), desactivado por defecto |
+| **Deshacer** (pauta de Material: snackbar con acción) | Quitar un dado con pulsación larga muestra "Quitaste un d8 · Deshacer" |
+| **Pistas que se retiran solas** | Las tres primeras tiradas el marcador enseña los gestos; después muestra la notación |
 
-**Lo que se dejó afuera, a propósito.** Dados con caras personalizadas (PCalc) y estadísticas de
-equidad (DiceShaker) son buenas ideas pero piden su propio diseño; quedan en la lista de pendientes.
-El historial va en DataStore y no en Room: con 50 entradas alcanza, y Room sigue reservado para la
-fase 4 (historial ilimitado, presets por personaje).
+El historial se guarda en DataStore: con 50 entradas alcanza.
 
 **Problemas y soluciones.**
 
@@ -454,8 +454,13 @@ fase 4 (historial ilimitado, presets por personaje).
 cualquiera) sino en **todo lo que ahorra pasos entre tirada y tirada**: repetir, guardar, elegir
 ventaja sin abrir un menú. Copiar sus pantallas no sirve; copiar sus atajos, sí.
 
-**De acá salió…** la idea de "tiradas por personaje" (agrupar las guardadas por ficha) y de
-compartir una tirada del historial con el grupo.
+**Verificación.** Igual que el capítulo 12, se escribió sin compilar; después de aplicar el parche
+compiló y pasaron los 60 tests (incluidos los nuevos de notación, ventaja e historial). Falta
+probarlo en el teléfono: agitar, voz y deshacer.
+
+**De acá salió…** ideas que todavía no están implementadas (tiradas agrupadas por personaje,
+compartir una tirada con el grupo); están en
+[INVESTIGACION_COMPETENCIA.md](INVESTIGACION_COMPETENCIA.md) §4.
 
 ---
 
@@ -466,7 +471,8 @@ compartir una tirada del historial con el grupo.
 2. **Medir antes de suponer.** Latencia, empujones, forzados, tiempos de tirada, píxeles de color:
    los números guiaron cada decisión y quedaron como tests.
 3. **Probar en el dispositivo real.** El emulador escondía problemas de rendimiento y de gestos, y
-   generaba otros que no existían.
+   generaba otros que no existían. Y un cambio hecho sin poder compilar (capítulos 12 y 13) no está
+   terminado hasta compilarlo y correr los tests.
 4. **Funciones puras para lo que se quiere probar.** Reglas, lector de caras, planificador de
    sonido y sombreado se testean sin Android.
 5. **El algoritmo del pintor tiene un costo.** Ver capítulo 11.
@@ -506,16 +512,12 @@ Investigación de apps pagas ──► mesa a pantalla completa (interfaz superp
 | Idea | Surgió de |
 |---|---|
 | Pre-simular al apoyar el dedo, para esconder la latencia con 20–30 dados | Capítulo 2 (medición de latencia). |
-| Lanzar agitando el teléfono (acelerómetro) | Plan original. |
 | Girar los números en la cenital para que se lean derechos | Capítulo 9 (algunos números quedan de cabeza). |
 | Atenuar la torre del castillo en la cenital (queda muy cerca de la cámara) | Capítulo 11. |
 | Otras aberturas para el cuero (ojos de buey con aro de latón, calado, escudo) | Capítulo 11 (opciones no elegidas). |
-| Packs de skins / sets de dados (gratis el núcleo, pagos los sets, como DiceShaker y D&D Beyond) | Capítulo 12 (investigación de competencia). |
-| Tiradas guardadas por personaje e historial, como Dice by PCalc | Capítulo 12 y fase 4 del plan. |
-| "Modo vitrina" sin interfaz y con cámara lenta para grabar el video promocional | Capítulo 12 (videos de la competencia). |
-| Dados con caras personalizadas (texto, emoji, imagen), como Dice by PCalc | Capítulo 13 (dejado afuera). |
-| Estadísticas de equidad de los propios dados, como DiceShaker | Capítulo 13 (dejado afuera). |
-| Tiradas agrupadas por personaje y compartir una tirada con el grupo | Capítulo 13. |
+
+Las ideas que salieron de la investigación de la competencia están en
+[INVESTIGACION_COMPETENCIA.md](INVESTIGACION_COMPETENCIA.md) §4.
 
 ---
 
