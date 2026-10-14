@@ -24,6 +24,7 @@ Los documentos de referencia (qué hay hoy, sin la historia) siguen existiendo:
 | [DICE_ROLLER_PLAN.md](DICE_ROLLER_PLAN.md) | Estructura del código, qué se reutilizó del proyecto anterior, mecánicas de juego investigadas y fuentes. |
 | [MODOS_DE_DECISION.md](MODOS_DE_DECISION.md) | Física, garantías de resultado, los dos modos, latencia, sonido y torres. |
 | [SKINS.md](SKINS.md) | Catálogo de skins, contraste de los números, creador y estilos. |
+| [GUIA_UX_UI.md](GUIA_UX_UI.md) | Pautas de interfaz (ergonomía, normas de Android y Material, patrones de otras apps) y cómo se aplica cada una. |
 | [INVESTIGACION_COMPETENCIA.md](INVESTIGACION_COMPETENCIA.md) | Apps de dados pagas, cómo se promocionan, sus patrones de interfaz e ideas todavía no implementadas. |
 | **Esta bitácora** | La historia: por qué las cosas son como son. |
 
@@ -507,6 +508,131 @@ se cambió en este capítulo).
 
 ---
 
+## Capítulo 15 · La franja del pulgar: dados a un toque y sin bordes del sistema
+
+**El pedido.** "Ahora necesito que mejores la UX/UI en base a las mejores prácticas actuales que
+incluso solucionen problemas que puedan aparecer actualmente." Junto con un informe sobre cómo
+gestionan los controles las apps con un gráfico dominante (cámaras, mapas, dados 3D, juegos de
+cartas), hecho a partir de un video de la versión anterior de la pantalla. Las pautas y sus fuentes
+quedaron en [GUIA_UX_UI.md](GUIA_UX_UI.md).
+
+**Qué seguía siendo un problema.** Varios puntos del informe ya estaban resueltos desde el
+capítulo 12 (mesa a pantalla completa, controles abajo, modo en Ajustes, pistas sólo al principio).
+Comparando el informe con la pantalla actual quedaban cuatro:
+
+1. La **manija amarilla del borde derecho**. Además de chocar con el "Atrás" de Android, estaba
+   centrada en la altura de la pantalla, y Android sólo respeta la exclusión del gesto en los 200 dp
+   de abajo de cada borde: deslizar ahí podía sacar al usuario de la app.
+2. **Tocar una ficha de dado no hacía nada**; para agregar un dado había que abrir la solapa.
+3. **No se podía saltar la animación** de la tirada.
+4. **No había modo para zurdos.**
+
+**La solución.**
+
+- **Sin manija ni gesto desde el borde.** La solapa (Legendario, especiales, skins) se abre con el
+  botón "Dados" y se cierra deslizando, tocando afuera o con "Atrás".
+- **Carrusel de dados** (`CarruselDados`) en lugar de la fila de fichas: todos los tipos en una fila
+  que se desplaza de costado. **Tocar suma uno, mantener quita uno** con "Deshacer", contador dorado
+  por tipo, los tipos que no están en la mesa se ven apagados y, después de la tirada, cada ficha
+  muestra sus valores (borde dorado si alguno decide el resultado). TalkBack lee, por ejemplo,
+  "d6, 2 en la mesa, salió 3, 4. Tocá para agregar, mantené para quitar".
+- **Tocar la mesa mientras ruedan los dados** adelanta la tirada hasta el final, sin sonido. El
+  marcador lo avisa: "Tocá la mesa para ver el resultado ya".
+- **Controles para zurdos** en Ajustes: "Tirada" y "Dados" cambian de lado; LANZAR queda al centro.
+  Se guarda en las preferencias.
+- Las pistas del marcador ya no mencionan el borde: enseñan a tocar los dados.
+
+**Problemas y soluciones.**
+
+| Problema | Causa | Solución |
+|---|---|---|
+| Al probar, el nombre del sistema de juego quedaba reducido a ".." con una torre elegida | El nombre del escenario ("Torre de madera") ocupaba todo el ancho que necesitaba | Nombre corto del escenario ("Madera", "Castillo"), ancho máximo de 170 dp y sin las flechas "▾"; TalkBack lee los nombres completos |
+| Tocar la mesa durante una tirada no la saltaba | El gesto de la mesa se registra una sola vez y quedaba atado al estado de "saltar" de la primera tirada | Un único estado para toda la vida de la mesa, que se reinicia al empezar cada tirada |
+| Al saltar, la pantalla se congelaba unos 400 ms | Se calculaban 3 s de física en un solo cuadro | Medio segundo de tirada por cuadro: se ve un avance rápido (unas 30 veces la velocidad normal) y termina sin trabarse |
+| Los botones laterales no compilaban dentro de una lambda | `Modifier.weight` sólo existe dentro de una fila | Las lambdas de los botones son extensiones de `RowScope` |
+| Los resultados debajo del nombre del dado no se leían | Letra de 10 sp, apretada en una línea | El valor reemplaza al dado, en 22 sp, con una ficha por dado |
+| ¿Cómo distinguir una pulsación larga de un toque o un deslizamiento en la mesa? | El gesto de la mesa decidía todo al soltar el dedo | Se espera hasta 500 ms: si suelta es un toque, si se mueve es un deslizamiento, y si sigue quieto es una pulsación larga |
+
+**Segunda vuelta, con lo visto en el teléfono.** El primer carrusel mostraba cuadros con el nombre
+del dado y los resultados en letra chica debajo, que no se apreciaban. El pedido: "El carrusel
+debería tener las imágenes en 3D que ya están en el sidebar", los resultados deberían "ocupar el
+espacio que tenía el nombre del dado" y verse bien cuando hay varios dados del mismo tipo, y
+"debería poder eliminarse un dado manteniéndolo presionado en el dice tray también".
+
+- Antes de tirar, cada tipo se ve con su **dado 3D** (`IconoDado3D`, el mismo de la solapa), con el
+  nombre debajo y el contador dorado.
+- Después de tirar, **el número ocupa el lugar del dado**: una ficha por dado con el valor en 22 sp,
+  sobre el color de su skin (el Legendario muestra su símbolo). Varios dados del mismo tipo forman
+  un grupo de fichas bajo un solo nombre ("d6: 5 6"); la que decide el resultado lleva borde dorado.
+- **Mantener apretado un dado sobre la mesa 3D lo quita**, con vibración y "Deshacer", igual que en
+  el carrusel. La mesa guarda la última cámara con la que dibujó y busca el dado quieto cuyo
+  contorno en pantalla contiene el dedo. La pulsación larga se reconoce a los 500 ms sin moverse;
+  si el dedo se mueve, sigue siendo un deslizamiento para lanzar, y un toque corto sigue alternando
+  la vista (o saltando la tirada).
+
+**Verificación.** Compila y pasan los 60 tests. En un Samsung A33 se comprobó: el carrusel (tocar
+suma, mantener quita con "Deshacer"; dados 3D antes de tirar; fichas grandes después, con dos d6
+agrupados), quitar un dado manteniéndolo apretado en la mesa, que no queda nada en el borde derecho, el salto de la tirada
+(registrado por log) y la barra superior sin recortes. Quedan por probar en el teléfono el modo
+zurdo y el comportamiento con navegación por gestos (el A33 usa los tres botones).
+
+**Lo que aprendimos.** Un informe hecho sobre una versión anterior sirve igual, pero hay que
+contrastarlo con la pantalla actual antes de tocar código: la mitad ya estaba resuelta, y probar en
+el teléfono encontró un problema que el informe no mencionaba (el nombre recortado).
+
+**De acá salió…** las ideas de UX que quedan pendientes en [GUIA_UX_UI.md](GUIA_UX_UI.md) §5
+(tiradas recientes a la vista, chip de último resultado, elegir escenario con miniaturas).
+
+---
+
+## Capítulo 16 · Colores que pertenecen al ambiente
+
+**El pedido.** "Lo que me está molestando hace rato es el delineado amarillo que está en los dados
+relevantes a la tirada, a la vez que bordeando los dados actuales en el carrusel. ¿Podrías hacer
+que el color del delineado y borde tenga coherencia y armonía con el ambiente del lanzador que esté
+seleccionado?" Y que los colores de los dados "sean diferentes entre sí, pero tengan algún contraste
+interesante con los colores del ambiente seleccionado. Actualmente son todos azules, verdes, violetas".
+
+**La solución.** Un objeto de dominio, `PaletasAmbiente`, con dos cosas por ambiente (bandeja de
+tapete, bandeja de madera, taberna, castillo, cuero):
+
+- **Acento**: sale de la luz de cada escena. Ámbar de vela en la taberna, lavanda de antorcha en el
+  castillo, turquesa en el cuero, crema sobre el tapete y ámbar suave sobre la madera. Lo usan el
+  contorno de los dados que deciden la tirada (en la mesa y en las fichas de resultado), los bordes
+  del carrusel y los contadores de la fila y de la solapa.
+- **Paleta "Por tipo"**: ocho colores bien distintos que evitan los tonos dominantes de la escena
+  (nada verde sobre el tapete, nada marrón ni naranja en la madera, nada violeta, gris ni turquesa
+  en el castillo, nada ciruela ni turquesa en el cuero). El Legendario conserva su dorado y las
+  skins elegidas a mano no cambian.
+
+La pantalla fija el ambiente activo según la torre o la superficie de la bandeja y lo reparte con
+`CompositionLocal` (`LocalAmbiente`, `LocalAcento`); los íconos 3D, el carrusel y la mesa lo leen
+para volver a pintarse cuando cambia.
+
+**Problemas y soluciones.**
+
+| Problema | Causa | Solución |
+|---|---|---|
+| El test de skins fallaba con las paletas nuevas | Exigía que la tinta declarada de "Por tipo" (blanca) se leyera sobre cada color, y ahora hay colores claros | Para "Por tipo" vale la tinta efectiva (pasa a negro sobre colores claros), comprobada en los cinco ambientes por `PaletasAmbienteTest` |
+| Sobre el tapete, el rojo del d4 y el magenta del dF se parecían | Los elegí "a ojo" | El test de distancia mínima lo detectó; el dF pasó a violeta |
+| En el cuero, el dorado del d4 y el naranja del d10 se parecían | Igual | El d10 pasó a esmeralda |
+| En el carrusel, los dados claros (marfil, dorado) mostraban números blancos ilegibles | Las fichas usaban la tinta declarada de la skin ("Por tipo" la declara blanca), no la tinta efectiva que ya usaba la mesa 3D | `colorTinta` usa la tinta efectiva: negro cuando el blanco no se lee sobre el color del dado |
+| El resaltado crema no se veía sobre una ficha marfil | Acento y cuerpo casi del mismo tono | Un anillo oscuro fino por dentro del borde de acento en las fichas resaltadas |
+| Al cambiar de escenario después de una tirada, la cámara seguía en la toma cenital | La vista del resultado sólo se cerraba si cambiaban los dados de la mesa, y cambiar de escenario los reacomoda sin cambiarlos | Cambiar de escenario o de superficie vuelve a la vista general |
+
+**Verificación.** Compila y pasan los 63 tests. En el Samsung A33 se vieron los cuatro ambientes
+(taberna, castillo, cuero y bandeja de tapete) con sus paletas y acentos, una tirada en la taberna
+con el Legendario resaltado en ámbar, y el cambio de escenario volviendo a la vista general.
+
+**Lo que aprendimos.** Un color de resaltado fijo funciona en una sola escena; cuando la escena
+cambia, el acento tiene que salir de ella. Y elegir colores "a ojo" engaña: un test con una
+distancia mínima entre colores encontró dos pares parecidos que en la pantalla no se notaban.
+
+**De acá salió…** que las skins elegidas a mano no se adaptan al ambiente (a propósito); una idea
+posible es sugerir, para cada escenario, skins que contrasten con él.
+
+---
+
 ## Patrones que se repitieron
 
 1. **Imitar lo que haría una persona.** Verter de a poco, golpear la torre, empujar un dado montado,
@@ -548,6 +674,10 @@ Lanzador de un dado ──► muchos dados + reglas de rol
                                 │
                                 └─► dados que aparecen de golpe ──► entrada desde fuera de la pantalla
 
+Informe de UX sobre gráficos dominantes ──► sin manija lateral, carrusel de dados, saltar la tirada, modo zurdo
+        └─► carrusel con dados 3D y resultados grandes ──► mantener apretado en la mesa también quita
+                └─► amarillo fijo y dados de la misma gama ──► acento y paleta "Por tipo" por ambiente
+
 Investigación de apps pagas ──► mesa a pantalla completa (interfaz superpuesta, hojas, inmersivo)
         └─► sus atajos ──► historial, "otra vez", guardadas, ventaja con pulsación larga, agitar, voz
 ```
@@ -561,6 +691,7 @@ Investigación de apps pagas ──► mesa a pantalla completa (interfaz superp
 | Atenuar la torre del castillo en la cenital (queda muy cerca de la cámara) | Capítulo 11. |
 | Otras aberturas para el cuero (ojos de buey con aro de latón, calado, escudo) | Capítulo 11 (opciones no elegidas). |
 | Que en la bandeja los dados también entren desde fuera de la pantalla | Capítulo 14. |
+| Sugerir skins que contrasten con cada escenario | Capítulo 16. |
 
 Las ideas que salieron de la investigación de la competencia están en
 [INVESTIGACION_COMPETENCIA.md](INVESTIGACION_COMPETENCIA.md) §4.

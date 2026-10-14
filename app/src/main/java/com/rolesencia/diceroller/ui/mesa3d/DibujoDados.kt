@@ -35,9 +35,13 @@ fun colorCuerpo(dado: DadoEnMesa): Color =
     if (dado.tipo == TipoDado.LEGENDARIO) Color(CatalogoSkins.colorPorTipo(TipoDado.LEGENDARIO))
     else Color(dado.skin.cuerpoPara(dado.tipo))
 
-/** Color de números y símbolos. */
+/**
+ * Color de números y símbolos: la tinta de la skin si se lee sobre el cuerpo; si no, negro o blanco
+ * (la misma regla que en la mesa 3D). Así un dado marfil o dorado de "Por tipo" lleva números negros.
+ */
 fun colorTinta(dado: DadoEnMesa): Color =
-    if (dado.tipo == TipoDado.LEGENDARIO) Color(0xFF2B1D05) else Color(dado.skin.tinta)
+    if (dado.tipo == TipoDado.LEGENDARIO) Color(0xFF2B1D05)
+    else Color(dado.skin.tintaEfectiva(dado.skin.cuerpoPara(dado.tipo)))
 
 /** Aristas: rojas en los dados especiales (Hambre, Miedo…), si no las de la skin. */
 fun colorBorde(dado: DadoEnMesa): Color = when {

@@ -17,18 +17,18 @@ import com.rolesencia.diceroller.domain.dados.TipoDado
  */
 object CatalogoSkins {
 
-    /** Colores de la skin "Por tipo": cada tipo de dado con su color, para distinguirlos de un vistazo. */
-    fun colorPorTipo(tipo: TipoDado): Long = when (tipo) {
-        TipoDado.D4 -> 0xFF00796BL
-        TipoDado.D6 -> 0xFF6A1B9AL
-        TipoDado.D8 -> 0xFF1565C0L
-        TipoDado.D10 -> 0xFF283593L
-        TipoDado.D100_DECENAS -> 0xFF37474FL
-        TipoDado.D12 -> 0xFF2E7D32L
-        TipoDado.D20 -> 0xFF4527A0L
-        TipoDado.FATE -> 0xFF5D4037L
-        TipoDado.LEGENDARIO -> 0xFFC9A227L
-    }
+    /**
+     * Ambiente donde se lanza (ver [PaletasAmbiente]): la pantalla lo fija según la torre o la
+     * superficie de la bandeja elegida, y la skin "Por tipo" toma sus colores de ahí.
+     */
+    @Volatile
+    var ambienteActivo: String = PaletasAmbiente.BANDEJA_LONA
+
+    /**
+     * Colores de la skin "Por tipo": cada tipo de dado con un color bien distinto, que además
+     * contrasta con el ambiente donde se lanza.
+     */
+    fun colorPorTipo(tipo: TipoDado): Long = PaletasAmbiente.porTipo(ambienteActivo, tipo)
 
     val POR_TIPO = SkinDado("por_tipo", "Por tipo", CategoriaSkin.POR_TIPO, cuerpo = null, tinta = BLANCO)
 

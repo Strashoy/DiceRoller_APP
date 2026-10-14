@@ -104,6 +104,7 @@ class DiceRollerViewModel(
                     pantallaCompleta = prefs.pantallaCompleta,
                     vozHabilitada = prefs.vozHabilitada,
                     agitarHabilitado = prefs.agitarHabilitado,
+                    manoIzquierda = prefs.manoIzquierda,
                     historial = prefs.historial,
                     tiradasGuardadas = prefs.tiradasGuardadas
                 )
@@ -132,7 +133,8 @@ class DiceRollerViewModel(
                     pantallaEncendida = s.pantallaEncendida,
                     pantallaCompleta = s.pantallaCompleta,
                     vozHabilitada = s.vozHabilitada,
-                    agitarHabilitado = s.agitarHabilitado
+                    agitarHabilitado = s.agitarHabilitado,
+                    manoIzquierda = s.manoIzquierda
                 )
             )
         }
@@ -198,12 +200,19 @@ class DiceRollerViewModel(
 
     fun quitarDado(id: Int) = editarMesa { estado -> estado.copy(pool = estado.pool.filterNot { it.id == id }) }
 
-    /** Quita el último dado agregado de ese tipo, prefiriendo uno con el [rol] indicado. */
-    fun quitarUnoDeTipo(tipo: TipoDado) = editarMesa { estado ->
+    /** Quita el último dado agregado de ese tipo, prefiriendo uno con el rol que se está agregando. */
+    fun quitarUnoDeTipo(tipo: TipoDado) {
+        val aQuitar = dadoAQuitar(_uiState.value, tipo) ?: return
+        editarMesa { estado -> estado.copy(pool = estado.pool - aQuitar) }
+    }
+
+    /** Qué dado quitaría [quitarUnoDeTipo] (para ofrecer "Deshacer"). */
+    fun dadoAQuitar(tipo: TipoDado): DadoEnMesa? = dadoAQuitar(_uiState.value, tipo)
+
+    private fun dadoAQuitar(estado: DiceRollerUiState, tipo: TipoDado): DadoEnMesa? {
         val rol = if (estado.especialSiguiente) RolDado.ESPECIAL else RolDado.NORMAL
         val delTipo = estado.pool.filter { it.tipo == tipo }
-        val aQuitar = delTipo.lastOrNull { it.rol == rol } ?: delTipo.lastOrNull() ?: return@editarMesa estado
-        estado.copy(pool = estado.pool - aQuitar)
+        return delTipo.lastOrNull { it.rol == rol } ?: delTipo.lastOrNull()
     }
 
     /** "Deshacer" tras quitar un dado: vuelve tal cual estaba (tipo, rol y skin). */
@@ -322,6 +331,11 @@ class DiceRollerViewModel(
 
     fun toggleVoz() {
         _uiState.update { it.copy(vozHabilitada = !it.vozHabilitada) }
+        guardar()
+    }
+
+    fun toggleZurdo() {
+        _uiState.update { it.copy(manoIzquierda = !it.manoIzquierda) }
         guardar()
     }
 

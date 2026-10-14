@@ -81,6 +81,8 @@ data class DiceRollerUiState(
     val vozHabilitada: Boolean = false,
     /** Agitar el teléfono lanza los dados, como sacudir un cubilete. */
     val agitarHabilitado: Boolean = true,
+    /** Controles para zurdos: los botones de los costados de LANZAR cambian de lado. */
+    val manoIzquierda: Boolean = false,
 
     // Historial (más reciente primero) y tiradas frecuentes guardadas con nombre
     val historial: List<EntradaHistorial> = emptyList(),

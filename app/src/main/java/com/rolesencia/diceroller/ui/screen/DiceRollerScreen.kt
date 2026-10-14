@@ -1,5 +1,11 @@
 package com.rolesencia.diceroller.ui.screen
 
+import com.rolesencia.diceroller.ui.theme.LocalAmbiente
+import com.rolesencia.diceroller.ui.theme.LocalAcento
+import com.rolesencia.diceroller.sensorial.MaterialMesa
+import com.rolesencia.diceroller.domain.apariencia.CatalogoSkins
+import com.rolesencia.diceroller.domain.apariencia.PaletasAmbiente
+import androidx.compose.runtime.CompositionLocalProvider
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
@@ -19,6 +25,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -67,6 +74,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -78,6 +86,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.rolesencia.diceroller.domain.dados.DadoEnMesa
 import com.rolesencia.diceroller.R
 import com.rolesencia.diceroller.domain.apariencia.SkinDado
 import com.rolesencia.diceroller.domain.historial.Notacion
@@ -89,7 +98,7 @@ import com.rolesencia.diceroller.tirada.Gesto
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 import com.rolesencia.diceroller.tirada.torre.ModelosTorre
-import com.rolesencia.diceroller.ui.components.FilaFichas
+import com.rolesencia.diceroller.ui.components.CarruselDados
 import com.rolesencia.diceroller.ui.components.HojaAjustes
 import com.rolesencia.diceroller.ui.components.HojaHistorial
 import com.rolesencia.diceroller.ui.components.HojaParametros
@@ -153,6 +162,19 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
     val avisos = remember { SnackbarHostState() }
     val alcance = rememberCoroutineScope()
 
+    /** Quitar un dado (desde el carrusel o manteniéndolo apretado en la mesa) siempre se puede deshacer. */
+    fun avisarQuitado(quitado: DadoEnMesa) {
+        vista.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        alcance.launch {
+            avisos.currentSnackbarData?.dismiss()
+            val r = avisos.showSnackbar(
+                "Quitaste un ${quitado.tipo.etiqueta}", actionLabel = "Deshacer",
+                duration = SnackbarDuration.Short
+            )
+            if (r == SnackbarResult.ActionPerformed) viewModel.restaurarDado(quitado)
+        }
+    }
+
     // Alto real de las barras superpuestas: la cámara encuadra la mesa en lo que queda libre.
     val densidad = LocalDensity.current
     var altoSuperior by remember { mutableIntStateOf(0) }
@@ -162,6 +184,13 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
     // Mientras ruedan los dados la interfaz se aparta: lo único que importa es la tirada.
     val opacidadControles by animateFloatAsState(if (ocupado) 0.25f else 1f, tween(350), label = "controles")
 
+    // Ambiente donde se lanza: define los colores "Por tipo" y el acento de los resaltados.
+    val ambiente = PaletasAmbiente.clave(state.modeloTorre, state.materialMesa == MaterialMesa.MADERA)
+    CatalogoSkins.ambienteActivo = ambiente
+    CompositionLocalProvider(
+        LocalAmbiente provides ambiente,
+        LocalAcento provides Color(PaletasAmbiente.acento(ambiente))
+    ) {
     Box(Modifier.fillMaxSize().background(DarkBlueFantasia)) {
         MesaDados3D(
             mesa = state.mesa,
@@ -176,6 +205,13 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
             onGesto = viewModel::lanzar,
             onProporcion = viewModel::actualizarProporcionMesa,
             onAlturaEntrada = viewModel::actualizarAlturaEntrada,
+            onMantenerDado = { id ->
+                val quitado = state.pool.firstOrNull { it.id == id }
+                if (quitado != null) {
+                    viewModel.quitarDado(id)
+                    avisarQuitado(quitado)
+                }
+            },
             modifier = Modifier.fillMaxSize(),
             modelo = torre,
             areaUtil = areaUtil
@@ -213,24 +249,22 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
                 .onSizeChanged { altoInferior = it.height },
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            FilaFichas(
+            // Fila de dados: tocar suma uno, mantener quita uno (y se puede deshacer).
+            CarruselDados(
                 pool = state.pool,
                 resultados = state.resultados,
                 destacados = state.veredicto?.dadosDestacados.orEmpty(),
                 estaRodando = ocupado,
-                onQuitarDado = { id ->
-                    val quitado = state.pool.firstOrNull { it.id == id }
-                    viewModel.quitarDado(id)
-                    if (quitado != null) alcance.launch {
-                        avisos.currentSnackbarData?.dismiss()
-                        val r = avisos.showSnackbar(
-                            "Quitaste un ${quitado.tipo.etiqueta}", actionLabel = "Deshacer",
-                            duration = SnackbarDuration.Short
-                        )
-                        if (r == SnackbarResult.ActionPerformed) viewModel.restaurarDado(quitado)
-                    }
+                skinActual = state.skinActual,
+                onAgregar = { tipo ->
+                    FeedbackTactil.clickBoton(vista)
+                    viewModel.agregarDado(tipo)
                 },
-                textoVacio = "Tocá «Dados» para armar la tirada"
+                onQuitar = { tipo ->
+                    val quitado = viewModel.dadoAQuitar(tipo)
+                    viewModel.quitarUnoDeTipo(tipo)
+                    if (quitado != null) avisarQuitado(quitado)
+                }
             )
             Spacer(Modifier.height(8.dp))
             Row(
@@ -238,13 +272,25 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                BotonSecundario(
-                    icono = R.drawable.ic_parametros,
-                    texto = resumenParametros(state.parametros, state.sistema.usaModificador, state.sistema.campoObjetivo),
-                    habilitado = !ocupado,
-                    modifier = Modifier.weight(1f).alpha(opacidadControles),
-                    onClick = { hoja = Hoja.PARAMETROS }
-                )
+                val botonTirada: @Composable RowScope.() -> Unit = {
+                    BotonSecundario(
+                        icono = R.drawable.ic_parametros,
+                        texto = resumenParametros(state.parametros, state.sistema.usaModificador, state.sistema.campoObjetivo),
+                        habilitado = !ocupado,
+                        modifier = Modifier.weight(1f).alpha(opacidadControles),
+                        onClick = { hoja = Hoja.PARAMETROS }
+                    )
+                }
+                val botonDados: @Composable RowScope.() -> Unit = {
+                    BotonSecundario(
+                        icono = R.drawable.ic_dados,
+                        texto = if (state.pool.isEmpty()) "Dados" else "Dados · ${state.pool.size}",
+                        habilitado = !ocupado,
+                        modifier = Modifier.weight(1f).alpha(opacidadControles),
+                        onClick = { abrirSolapa++ }
+                    )
+                }
+                if (state.manoIzquierda) botonDados() else botonTirada()
                 BotonLanzar(
                     ocupado = ocupado,
                     habilitado = !ocupado && state.pool.isNotEmpty(),
@@ -252,17 +298,11 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
                     onLanzar = { FeedbackTactil.clickBoton(vista); viewModel.lanzar() },
                     onLanzarCon = viewModel::lanzarCon
                 )
-                BotonSecundario(
-                    icono = R.drawable.ic_dados,
-                    texto = if (state.pool.isEmpty()) "Dados" else "Dados · ${state.pool.size}",
-                    habilitado = !ocupado,
-                    modifier = Modifier.weight(1f).alpha(opacidadControles),
-                    onClick = { abrirSolapa++ }
-                )
+                if (state.manoIzquierda) botonTirada() else botonDados()
             }
         }
 
-        // Solapa de dados: deslizando desde el borde derecho o con el botón "Dados".
+        // Solapa de dados (Legendario, especiales, skins): se abre con el botón "Dados".
         SolapaDados(
             pool = state.pool,
             habilitado = !ocupado,
@@ -298,6 +338,8 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
                 onCerrar = { mostrarCreador = false }
             )
         }
+    }
+
     }
 
     val cerrar = { hoja = Hoja.NINGUNA }
@@ -352,6 +394,8 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
             onVoz = viewModel::toggleVoz,
             agitar = state.agitarHabilitado,
             onAgitar = viewModel::toggleAgitar,
+            zurdo = state.manoIzquierda,
+            onZurdo = viewModel::toggleZurdo,
             onCerrar = cerrar
         )
     }
@@ -373,7 +417,7 @@ private fun BarraSuperior(
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp).alpha(opacidad),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         // Sistema de juego: es lo que define cómo se lee la tirada, por eso va primero y con nombre.
         // Ocupa el espacio libre y empuja lo demás a la derecha; si el nombre es largo, se recorta.
@@ -381,14 +425,18 @@ private fun BarraSuperior(
             PildoraSuperior(
                 icono = R.drawable.ic_sistema,
                 texto = state.sistema.nombre,
+                descripcion = "Sistema de juego: " + state.sistema.nombre,
                 habilitado = !ocupado,
                 onClick = onSistema
             )
         }
-        Box {
+        // Escenario: nombre corto (el ícono ya dice "torre") y con tope de ancho, para que nunca
+        // aplaste al sistema de juego, que es lo que más importa leer.
+        Box(Modifier.widthIn(max = 170.dp)) {
             PildoraSuperior(
                 icono = R.drawable.ic_torre,
-                texto = state.modeloTorre?.let { ModelosTorre.nombre(it) } ?: "Bandeja",
+                texto = nombreCortoEscenario(state.modeloTorre),
+                descripcion = "Dónde se lanza: " + (state.modeloTorre?.let { ModelosTorre.nombre(it) } ?: "Bandeja"),
                 habilitado = !ocupado,
                 onClick = { menuLanzamiento = true }
             )
@@ -414,11 +462,20 @@ private fun BarraSuperior(
     }
 }
 
+private fun nombreCortoEscenario(id: String?): String = when (id) {
+    null -> "Bandeja"
+    "madera" -> "Madera"
+    "castillo" -> "Castillo"
+    "cuero" -> "Cuero"
+    else -> ModelosTorre.nombre(id)
+}
+
 /** Botón tipo "píldora" translúcido: se lee sobre la mesa sin taparla. */
 @Composable
 private fun PildoraSuperior(
     @DrawableRes icono: Int,
     texto: String,
+    descripcion: String,
     habilitado: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -426,17 +483,17 @@ private fun PildoraSuperior(
     FilledTonalButton(
         onClick = onClick,
         enabled = habilitado,
-        contentPadding = PaddingValues(horizontal = 14.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp),
         colors = ButtonDefaults.filledTonalButtonColors(
             containerColor = Color.Black.copy(alpha = 0.45f),
             contentColor = Ivory
         ),
-        modifier = modifier.heightIn(min = 48.dp)
+        // TalkBack lee el nombre completo aunque en pantalla se vea recortado.
+        modifier = modifier.heightIn(min = 48.dp).semantics { contentDescription = descripcion }
     ) {
         Icon(painterResource(icono), contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(6.dp))
         Text(texto, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-        Text(" ▾", color = Ivory.copy(alpha = 0.6f))
     }
 }
 
@@ -542,12 +599,12 @@ private fun BotonSecundario(
 private fun Marcador(state: DiceRollerUiState, hayTorre: Boolean) {
     val contenido: Pair<String, String?> = when {
         state.preparando -> "Pre-simulando la tirada…" to null
-        state.estaRodando -> "Rodando…" to null
+        state.estaRodando -> "Rodando…" to "Tocá la mesa para ver el resultado ya"
         state.veredicto != null -> state.veredicto.titulo to state.veredicto.detalle.takeIf { it.isNotBlank() }
-        state.pool.isEmpty() -> "Mesa vacía" to "Deslizá desde el borde derecho o tocá «Dados»"
+        state.pool.isEmpty() -> "Mesa vacía" to "Tocá un dado de abajo para agregarlo"
         // Las primeras veces, la pista de uso; después, la tirada en notación ("1d20 + 5").
-        state.historial.size < 3 && hayTorre -> "Listo para lanzar" to "LANZAR suelta los dados por la torre · mantenelo para ventaja"
-        state.historial.size < 3 -> "Listo para lanzar" to "Deslizá sobre la mesa, agitá el teléfono o mantené LANZAR para ventaja"
+        state.historial.size < 3 && hayTorre -> "Listo para lanzar" to "Tocá un dado para sumarlo, mantenelo para quitarlo · LANZAR los suelta por la torre"
+        state.historial.size < 3 -> "Listo para lanzar" to "Tocá un dado para sumarlo · deslizá sobre la mesa o tocá LANZAR"
         else -> Notacion.de(state.pool, if (state.sistema.usaModificador) state.parametros.modificador else 0) to state.sistema.nombre
     }
     val color = state.veredicto?.takeIf { !state.estaRodando && !state.preparando }?.let { colorDe(it.nivel) } ?: Ivory

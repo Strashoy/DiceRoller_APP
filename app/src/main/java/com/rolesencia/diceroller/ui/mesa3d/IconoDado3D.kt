@@ -1,5 +1,6 @@
 package com.rolesencia.diceroller.ui.mesa3d
 
+import com.rolesencia.diceroller.ui.theme.LocalAmbiente
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -28,8 +29,9 @@ fun IconoDado3D(
     skin: SkinDado = CatalogoSkins.POR_TIPO
 ) {
     val contexto = LocalContext.current
+    val ambiente = LocalAmbiente.current
     val pintor = remember { PintorDados(SimbolosLegendarios(contexto)) }
-    val dado = remember(tipo, rol, skin) {
+    val dado = remember(tipo, rol, skin, ambiente) {
         DadoVisual(DadoEnMesa(-1, tipo, rol, skin), Vec3.CERO, orientacionIcono(tipo), enReposo = true)
     }
     val vertices = remember(tipo) { Poliedros.de(tipo).vertices.map { dado.orientacion.rotar(it) } }

@@ -58,7 +58,7 @@ class PintorDados(private val simbolos: SimbolosLegendarios? = null) {
         scope.drawOval(Color.Black.copy(alpha = alfa), topLeft = Offset(centro.x - r, centro.y - r * aplastado), size = Size(2 * r, 2f * aplastado * r))
     }
 
-    fun dibujarDado(scope: DrawScope, camara: Camara, dado: DadoVisual, destacado: Boolean) {
+    fun dibujarDado(scope: DrawScope, camara: Camara, dado: DadoVisual, destacado: Boolean, acento: Color = Color(0xFFFFD700)) {
         val tipo = dado.dado.tipo
         val legendario = tipo == TipoDado.LEGENDARIO
         val skin = dado.dado.skin
@@ -68,7 +68,7 @@ class PintorDados(private val simbolos: SimbolosLegendarios? = null) {
         val mundo = poli.vertices.map { dado.posicion + q.rotar(it) }
         val pantalla = mundo.map { camara.proyectar(it) }
         val especial = dado.dado.rol == RolDado.ESPECIAL
-        val borde = if (destacado) Color(0xFFFFD700) else colorBorde(dado.dado).copy(alpha = if (especial) 1f else 0.85f)
+        val borde = if (destacado) acento else colorBorde(dado.dado).copy(alpha = if (especial) 1f else 0.85f)
         val anchoBorde = if (destacado) 3f else if (especial) 2.4f else 1.3f
 
         fun camino(cara: Cara) = Path().apply {

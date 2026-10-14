@@ -1,5 +1,6 @@
 package com.rolesencia.diceroller.ui.components
 
+import com.rolesencia.diceroller.ui.theme.LocalAcento
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
@@ -60,12 +61,12 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 private val ANCHO_PANEL = 116.dp
-private val ANCHO_ASA = 24.dp
-private val ALTO_ASA = 180.dp
 
 /**
- * Solapa lateral con los dados. Se abre deslizando desde el borde derecho (o tocando el asa) y
- * se cierra deslizando hacia la derecha, tocando fuera o con "atrás".
+ * Solapa lateral con los dados, el Legendario, los especiales y las skins. Se abre con el botón
+ * "Dados" de la barra inferior y se cierra deslizando hacia la derecha, tocando fuera o con "atrás".
+ * No tiene manija ni se abre desde el borde: con la navegación por gestos de Android, deslizar
+ * desde un borde lateral es "Atrás", y el sistema sólo deja excluir los 200 dp de abajo de cada borde.
  * Los dados van de arriba hacia abajo en orden ascendente (con el Legendario al final) y entran
  * escalonados al abrirse. Tocar un dado lo agrega; el (−) de su esquina izquierda quita uno.
  *
@@ -89,11 +90,7 @@ fun SolapaDados(
     onEditarSkin: (SkinDado) -> Unit,
     onBorrarSkin: (SkinDado) -> Unit,
     modifier: Modifier = Modifier,
-    /**
-     * Cada vez que cambia (y es > 0) la solapa se abre. Lo usa el botón "Dados" de la barra inferior:
-     * el deslizamiento desde el borde sigue funcionando, pero un gesto oculto no debe ser la única
-     * forma de llegar a una función (pauta de Material: todo gesto necesita un control visible).
-     */
+    /** Cada vez que cambia (y es > 0) la solapa se abre. Lo usa el botón "Dados" de la barra inferior. */
     solicitudApertura: Int = 0
 ) {
     val anchoPx = with(LocalDensity.current) { ANCHO_PANEL.toPx() }
@@ -143,26 +140,6 @@ fun SolapaDados(
                 .offset { IntOffset(desplazamiento.value.roundToInt(), 0) },
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Asa: lo único visible con la solapa cerrada. Se excluye del gesto "atrás" del sistema
-            // para que deslizar desde el borde derecho abra la solapa en vez de salir de la app.
-            Box(
-                Modifier
-                    .width(ANCHO_ASA)
-                    .height(ALTO_ASA)
-                    .systemGestureExclusion()
-                    .draggable(arrastre, Orientation.Horizontal, onDragStopped = { asentar(it) })
-                    .clickable { asentar(if (progreso > 0.5f) 1000f else -1000f) },
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                Box(
-                    Modifier
-                        .graphicsLayer { alpha = 1f - progreso }
-                        .width(10.dp)
-                        .height(ALTO_ASA * 0.55f)
-                        .background(DoradoLegendario.copy(alpha = 0.75f), RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))
-                )
-            }
-
             Column(
                 Modifier
                     .width(ANCHO_PANEL)
@@ -228,7 +205,7 @@ fun SolapaDados(
                                     Modifier
                                         .align(Alignment.TopEnd)
                                         .size(20.dp)
-                                        .background(DoradoLegendario, CircleShape),
+                                        .background(LocalAcento.current, CircleShape),
                                     contentAlignment = Alignment.Center
                                 ) { Text("$cantidad", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                             }

@@ -25,8 +25,9 @@ class SkinsTest {
     @Test fun todas_las_skins_del_catalogo_se_leen_bien() {
         CatalogoSkins.predefinidas.forEach { skin ->
             TipoDado.entries.filter { it != TipoDado.LEGENDARIO }.forEach { tipo ->
-                // La tinta declarada se lee sobre el cuerpo en los estilos de un solo color…
-                if (skin.estilo != EstiloSkin.BICOLOR && skin.estilo != EstiloSkin.DEGRADADO) {
+                // La tinta declarada se lee sobre el cuerpo en los estilos de un solo color (salvo
+                // "Por tipo", cuyos colores cambian con el ambiente: ver PaletasAmbienteTest)…
+                if (skin.estilo != EstiloSkin.BICOLOR && skin.estilo != EstiloSkin.DEGRADADO && skin.id != CatalogoSkins.POR_TIPO.id) {
                     val c = ColorArgb.contraste(skin.cuerpoPara(tipo), skin.tinta)
                     assertTrue("${skin.nombre} en ${tipo.etiqueta}: contraste ${"%.2f".format(c)}", c >= 4.5)
                 }

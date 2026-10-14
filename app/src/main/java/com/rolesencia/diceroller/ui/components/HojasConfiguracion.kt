@@ -150,6 +150,8 @@ fun HojaAjustes(
     onVoz: () -> Unit,
     agitar: Boolean,
     onAgitar: () -> Unit,
+    zurdo: Boolean,
+    onZurdo: () -> Unit,
     onCerrar: () -> Unit
 ) {
     ModalBottomSheet(
@@ -206,6 +208,7 @@ fun HojaAjustes(
 
             Seccion("Lanzar")
             Interruptor("Agitar para lanzar", "Sacudí el teléfono como un cubilete", agitar, onAgitar)
+            Interruptor("Controles para zurdos", "«Tirada» y «Dados» cambian de lado", zurdo, onZurdo)
 
             Seccion("Sonido, vibración y voz")
             Interruptor("Sonido de los dados", "Foley grabado: cada choque suena distinto", audio, onAudio)

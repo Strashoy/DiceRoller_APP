@@ -1,5 +1,10 @@
 package com.rolesencia.diceroller.ui.mesa3d
 
+import com.rolesencia.diceroller.ui.theme.LocalAmbiente
+import com.rolesencia.diceroller.ui.theme.LocalAcento
+import androidx.compose.ui.geometry.Offset
+import android.view.HapticFeedbackConstants
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -45,6 +50,8 @@ import kotlinx.coroutines.isActive
 import kotlin.math.hypot
 
 private const val ALTO_PARED = 3.5f
+/** Lo que tarda en reconocerse una pulsación larga (el estándar de Android ronda los 400–500 ms). */
+private const val PULSACION_LARGA_MS = 500L
 /** Altura de la cámara cenital del resultado (cm). */
 private const val ALTO_CENITAL = 40f
 /** Medio lado mínimo del encuadre del resultado: un solo dado no ocupa toda la pantalla. */
@@ -81,13 +88,19 @@ fun MesaDados3D(
      * Con torre: avisa desde qué altura (cm) un dado soltado sobre la boca queda entero por encima
      * del borde superior de la pantalla. Así los dados entran cayendo desde fuera de cuadro.
      */
-    onAlturaEntrada: (String, Float) -> Unit = { _, _ -> }
+    onAlturaEntrada: (String, Float) -> Unit = { _, _ -> },
+    /** Mantener apretado un dado de la mesa (sin tirada en curso): se lo quiere quitar. */
+    onMantenerDado: (Int) -> Unit = {}
 ) {
     var dibujo by remember { mutableStateOf(dadosQuietos) }
     val escena = remember(modelo) { modelo?.let { EscenaTorre(it) } }
     val cuadro by rememberUpdatedState(onCuadro)
     val terminada by rememberUpdatedState(onSesionTerminada)
     val contexto = LocalContext.current
+    // El acento del ambiente resalta los dados que deciden la tirada; leer el ambiente hace que la
+    // mesa se vuelva a pintar si cambian los colores "Por tipo".
+    val acento = LocalAcento.current
+    LocalAmbiente.current
     val pintor = remember { PintorDados(SimbolosLegendarios(contexto)) }
 
     // Área útil en píxeles (izquierda, arriba, derecha, abajo).
@@ -121,6 +134,9 @@ fun MesaDados3D(
     // Vuelve a la vista general en cuanto empieza otra tirada o cambian los dados de la mesa.
     val vistaResultado = remember { Animatable(0f) }
     var idsResultado by remember { mutableStateOf<Set<Int>?>(null) }
+    // Cambiar de escenario o de superficie reacomoda los dados para la próxima tirada: el resultado
+    // anterior ya no está en la mesa, así que se vuelve a la vista general.
+    LaunchedEffect(modelo?.id, material) { idsResultado = null }
     val enResultado = sesion == null && !preparando && idsResultado != null &&
         dadosQuietos.isNotEmpty() && dadosQuietos.map { it.dado.id }.toSet() == idsResultado
     // Con el resultado en pantalla, un toque alterna entre la vista cenital y la general (torre).
@@ -132,16 +148,31 @@ fun MesaDados3D(
         else vistaResultado.animateTo(0f, tween(500, easing = FastOutSlowInEasing))
     }
 
+    // Tocar la mesa mientras ruedan los dados adelanta la tirada hasta el final (como piden los
+    // usuarios de otras apps de dados: la física es linda, pero no siempre hay ganas de esperarla).
+    // Un solo estado para toda la vida de la mesa (el gesto lo captura una vez); se reinicia en cada tirada.
+    var saltar by remember { mutableStateOf(false) }
+
     // Bucle de animación: un paso de sesión por cuadro de pantalla (vsync).
     LaunchedEffect(sesion) {
+        saltar = false
         val actual = sesion ?: return@LaunchedEffect
         var anterior = withFrameNanos { it }
         while (isActive && !actual.terminada) {
             withFrameNanos { ahora ->
-                val frame = actual.avanzar((ahora - anterior) / 1e9f)
+                if (saltar) {
+                    // Medio segundo de tirada por cuadro (unas 30 veces más rápido) y sin sonidos: se ve
+                    // un instante de avance rápido y termina, sin congelar la pantalla.
+                    var frame = actual.avanzar(0.1f)
+                    repeat(4) { if (!actual.terminada) frame = actual.avanzar(0.1f) }
+                    dibujo = frame.dados
+                    cuadro(FrameMesa(frame.dados, emptyList()), ahora)
+                } else {
+                    val frame = actual.avanzar((ahora - anterior) / 1e9f)
+                    dibujo = frame.dados
+                    cuadro(frame, ahora)
+                }
                 anterior = ahora
-                dibujo = frame.dados
-                cuadro(frame, ahora)
             }
         }
         if (isActive) {
@@ -153,6 +184,20 @@ fun MesaDados3D(
 
     val lanzarConGesto by rememberUpdatedState(onGesto)
     val habilitado by rememberUpdatedState(puedeLanzar)
+    val rodando by rememberUpdatedState(sesion != null)
+    val mantenerDado by rememberUpdatedState(onMantenerDado)
+    val vistaAndroid = LocalView.current
+    // Última cámara con la que se dibujó: sirve para saber qué dado hay debajo del dedo.
+    val camaraDibujada = remember { arrayOfNulls<Camara>(1) }
+
+    /** El dado quieto cuyo contorno en pantalla contiene (con un poco de margen) al punto tocado. */
+    fun dadoEn(punto: Offset): DadoVisual? {
+        val camara = camaraDibujada[0] ?: return null
+        return dibujo.filter { it.enReposo }
+            .map { d -> d to (camara.proyectar(d.posicion) - punto).getDistance() / camara.tamanoEnPantalla(d.posicion, Poliedros.de(d.dado.tipo).radio) }
+            .filter { it.second < 1.3f }
+            .minByOrNull { it.second }?.first
+    }
 
     Box(modifier) {
         Canvas(
@@ -169,7 +214,37 @@ fun MesaDados3D(
                         var ultimoTiempo = inicio.uptimeMillis
                         rastreador.addPosition(inicio.uptimeMillis, inicio.position)
                         inicio.consume()
-                        while (true) {
+                        val margenToque = 24.dp.toPx()
+                        var suelto = false
+                        // Primer medio segundo: ¿suelta, se mueve o se queda quieto (pulsación larga)?
+                        val definido = withTimeoutOrNull(PULSACION_LARGA_MS) {
+                            while (true) {
+                                val evento = awaitPointerEvent(PointerEventPass.Initial)
+                                val cambio = evento.changes.firstOrNull { it.id == inicio.id }
+                                if (cambio == null) { suelto = true; break }
+                                rastreador.addPosition(cambio.uptimeMillis, cambio.position)
+                                ultima = cambio.position
+                                ultimoTiempo = cambio.uptimeMillis
+                                cambio.consume()
+                                if (!cambio.pressed) { suelto = true; break }
+                                if ((cambio.position - inicio.position).getDistance() > margenToque) break
+                            }
+                            true
+                        }
+                        if (definido == null) {
+                            // Pulsación larga sobre un dado de la mesa: quitarlo (como en el carrusel).
+                            if (!rodando) dadoEn(inicio.position)?.let { d ->
+                                vistaAndroid.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                mantenerDado(d.dado.id)
+                            }
+                            while (true) {
+                                val evento = awaitPointerEvent(PointerEventPass.Initial)
+                                evento.changes.forEach { it.consume() }
+                                if (evento.changes.none { it.pressed }) break
+                            }
+                            return@awaitEachGesture
+                        }
+                        while (!suelto) {
                             val evento = awaitPointerEvent(PointerEventPass.Initial)
                             val cambio = evento.changes.firstOrNull { it.id == inicio.id } ?: break
                             rastreador.addPosition(cambio.uptimeMillis, cambio.position)
@@ -185,7 +260,7 @@ fun MesaDados3D(
                         if (habilitado && rapidez > 800f && recorrido > 80.dp.toPx()) {
                             lanzarConGesto(Gesto(v.x, v.y, (rapidez / 4000f).coerceIn(0.15f, 1f)))
                         } else if (recorrido < 24.dp.toPx() && ultimoTiempo - inicio.uptimeMillis < 400) {
-                            alternarVista()
+                            if (rodando) saltar = true else alternarVista()
                         }
                     }
                 }
@@ -217,15 +292,16 @@ fun MesaDados3D(
                 camara = if (escena != null) camaraGeneral(escena, mesa, size.width, size.height, izq, arr, der, aba)
                 else Camara(ojoGeneral, miraGeneral).also { it.ajustar(general, anchoUtil, altoUtil, margen = 6f, x0 = izq, y0 = arr) }
             }
+            camaraDibujada[0] = camara
             if (escena != null) {
-                dibujarConTorre(escena, camara, dibujo, destacados, pintor, vineta = 1f - t)
+                dibujarConTorre(escena, camara, dibujo, destacados, pintor, vineta = 1f - t, acento = acento)
                 return@Canvas
             }
             dibujarFondoBandeja(arr + altoUtil / 2f)
             dibujarBandeja(camara, mx, mz, material)
             val ordenados = dibujo.sortedByDescending { camara.profundidad(it.posicion) }
             ordenados.forEach { pintor.dibujarSombra(this, camara, it) }
-            ordenados.forEach { pintor.dibujarDado(this, camara, it, it.dado.id in destacados) }
+            ordenados.forEach { pintor.dibujarDado(this, camara, it, it.dado.id in destacados, acento) }
         }
         // El aviso de "pre-simulando" lo muestra la pantalla, en la zona de estado de la interfaz.
     }
@@ -349,14 +425,14 @@ private fun DrawScope.dibujarBandeja(camara: Camara, mx: Float, mz: Float, mater
  */
 private fun DrawScope.dibujarConTorre(
     escena: EscenaTorre, camara: Camara,
-    dados: List<DadoVisual>, destacados: Set<Int>, pintor: PintorDados, vineta: Float
+    dados: List<DadoVisual>, destacados: Set<Int>, pintor: PintorDados, vineta: Float, acento: Color
 ) {
     escena.dibujarFondoYPiso(this, camara)
     dados.forEach { pintor.dibujarSombra(this, camara, it) }
     val lista = escena.dibujables(camara) + dados.map { d ->
         // Un poco hacia la cámara: un dado apoyado se dibuja después de la baldosa sobre la que está.
         Dibujable(camara.profundidad(d.posicion) - Poliedros.de(d.dado.tipo).radio * 0.6f) {
-            pintor.dibujarDado(this, camara, d, d.dado.id in destacados)
+            pintor.dibujarDado(this, camara, d, d.dado.id in destacados, acento)
         }
     }
     lista.sortedByDescending { it.profundidad }.forEach { it.dibujar(this) }

@@ -53,6 +53,7 @@ data class PreferenciasGuardadas(
     val pantallaCompleta: Boolean = true,
     val vozHabilitada: Boolean = false,
     val agitarHabilitado: Boolean = true,
+    val manoIzquierda: Boolean = false,
     // Se leen junto con el resto pero se guardan aparte (guardarHistorial / guardarTiradas):
     // así cambiar un ajuste no reescribe 50 tiradas.
     val historial: List<EntradaHistorial> = emptyList(),
@@ -79,6 +80,7 @@ class GestorPreferencias(private val context: Context) {
         val PANTALLA_COMPLETA = booleanPreferencesKey("pantalla_completa")
         val VOZ = booleanPreferencesKey("voz_habilitada")
         val AGITAR = booleanPreferencesKey("agitar_habilitado")
+        val ZURDO = booleanPreferencesKey("mano_izquierda")
         val HISTORIAL = stringPreferencesKey("historial")
         val TIRADAS = stringPreferencesKey("tiradas_guardadas")
         const val SIN_OBJETIVO = Int.MIN_VALUE
@@ -110,6 +112,7 @@ class GestorPreferencias(private val context: Context) {
                 pantallaCompleta = p[PANTALLA_COMPLETA] ?: true,
                 vozHabilitada = p[VOZ] ?: false,
                 agitarHabilitado = p[AGITAR] ?: true,
+                manoIzquierda = p[ZURDO] ?: false,
                 historial = decodificarHistorial(p[HISTORIAL].orEmpty(), decodificarSkins(p[SKINS].orEmpty())),
                 tiradasGuardadas = decodificarTiradas(p[TIRADAS].orEmpty(), decodificarSkins(p[SKINS].orEmpty()))
             )
@@ -134,6 +137,7 @@ class GestorPreferencias(private val context: Context) {
             p[PANTALLA_COMPLETA] = prefs.pantallaCompleta
             p[VOZ] = prefs.vozHabilitada
             p[AGITAR] = prefs.agitarHabilitado
+            p[ZURDO] = prefs.manoIzquierda
         }
     }
 
