@@ -9,7 +9,18 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.rolesencia.diceroller.data.GestorPreferencias
 import com.rolesencia.diceroller.data.PreferenciasGuardadas
+import com.rolesencia.diceroller.data.discord.DesenlaceDiscord
+import com.rolesencia.diceroller.data.discord.EstadoDiscord
+import com.rolesencia.diceroller.data.discord.FaseDiscord
+import com.rolesencia.diceroller.data.discord.GestorDiscord
+import com.rolesencia.diceroller.data.discord.PublicadorDiscord
+import com.rolesencia.diceroller.data.discord.ServicioDiscord
 import com.rolesencia.diceroller.domain.apariencia.CatalogoSkins
+import com.rolesencia.diceroller.domain.discord.ConfigDiscord
+import com.rolesencia.diceroller.domain.discord.EnvioDiscord
+import com.rolesencia.diceroller.domain.discord.MensajeTirada
+import com.rolesencia.diceroller.domain.discord.ResultadoEnvio
+import com.rolesencia.diceroller.domain.discord.WebhookDiscord
 import com.rolesencia.diceroller.domain.apariencia.SkinDado
 import com.rolesencia.diceroller.domain.dados.DadoEnMesa
 import com.rolesencia.diceroller.domain.dados.FuenteResultados
@@ -58,6 +69,8 @@ class DiceRollerViewModel(
     private val gestorSonido: GestorSonido,
     private val gestorHaptico: GestorHaptico,
     private val gestorPreferencias: GestorPreferencias,
+    private val gestorDiscord: GestorDiscord,
+    private val publicador: PublicadorDiscord,
     /** Sorteo de los números en el modo predeterminado (cuando no se eligen a mano). */
     private val sorteo: FuenteResultados = LanzadorAleatorio()
 ) : ViewModel() {
@@ -75,6 +88,13 @@ class DiceRollerViewModel(
     private var proporcionMesa = 1.2f
     /** Altura (cm) desde la que se sueltan los dados en cada torre, informada por la mesa 3D. */
     private val alturasEntrada = HashMap<String, Float>()
+
+    // Discord: datos de la tirada en curso. Los "pendientes" los deja quien pide la tirada y
+    // [lanzar] los toma al arrancar, así nunca quedan colgados para una tirada posterior.
+    private var ocultaPendiente = false
+    private var ocultaEnCurso = false
+    private var etiquetaPendiente: String? = null
+    private var etiquetaEnCurso: String? = null
 
     init {
         viewModelScope.launch {
@@ -111,6 +131,12 @@ class DiceRollerViewModel(
                     tiradasGuardadas = prefs.tiradasGuardadas
                 )
             }
+            // Discord, recién con el historial cargado: los desenlaces que llegan se anotan en él.
+            val discord = gestorDiscord.configFlow.first()
+            _uiState.update { it.copy(discord = discord) }
+            publicador.configurar(discord)
+            launch { publicador.estado.collect { onEstadoDiscord(it) } }
+            launch { publicador.desenlaces.collect { onDesenlaceDiscord(it) } }
         }
     }
 
@@ -400,7 +426,92 @@ class DiceRollerViewModel(
     fun lanzarGuardada(tirada: TiradaGuardada) {
         if (ocupado || tirada.pool.isEmpty()) return
         cargar(tirada.sistemaId, tirada.pool, tirada.parametros)
+        etiquetaPendiente = tirada.nombre   // en Discord se lee "Espada larga: Éxito · 19"
         lanzar()
+    }
+
+    // --- DISCORD ---
+
+    /** "Tirada oculta" del menú de LANZAR: se tira como siempre pero no se publica (la del máster). */
+    fun lanzarOculta() {
+        if (ocupado || _uiState.value.pool.isEmpty()) return
+        ocultaPendiente = true
+        lanzar()
+    }
+
+    fun cambiarDiscord(config: ConfigDiscord) {
+        val limpia = config.copy(webhook = config.webhook.trim(), jugador = config.jugador.take(WebhookDiscord.MAX_NOMBRE))
+        _uiState.update { it.copy(discord = limpia, pruebaDiscord = null) }
+        publicador.configurar(limpia)
+        viewModelScope.launch { gestorDiscord.guardarConfig(limpia) }
+    }
+
+    /** "Enviar prueba": manda un mensaje al canal para confirmar que el webhook funciona. */
+    fun probarDiscord() {
+        val config = _uiState.value.discord
+        if (!config.activo || _uiState.value.pruebaDiscord == PruebaDiscord.EN_CURSO) return
+        _uiState.update { it.copy(pruebaDiscord = PruebaDiscord.EN_CURSO) }
+        viewModelScope.launch {
+            val resultado = when (publicador.probar(config)) {
+                ResultadoEnvio.Enviado -> PruebaDiscord.LLEGO
+                is ResultadoEnvio.Reintentar -> PruebaDiscord.SIN_CONEXION
+                ResultadoEnvio.WebhookInvalido -> PruebaDiscord.WEBHOOK_INVALIDO
+                is ResultadoEnvio.Rechazado -> PruebaDiscord.RECHAZADA
+            }
+            _uiState.update { it.copy(pruebaDiscord = resultado) }
+        }
+    }
+
+    fun avisoWebhookVisto() = _uiState.update { it.copy(avisoWebhookInvalido = false) }
+
+    private fun onEstadoDiscord(estado: EstadoDiscord) {
+        _uiState.update { it.copy(estadoDiscord = estado) }
+        if (estado.fase != FaseDiscord.WEBHOOK_INVALIDO) return
+        // Discord dijo que el webhook ya no existe: se apaga el envío y se avisa una vez.
+        val apagada = _uiState.value.discord.copy(habilitado = false)
+        _uiState.update { it.copy(discord = apagada, avisoWebhookInvalido = true) }
+        publicador.configurar(apagada)
+        viewModelScope.launch { gestorDiscord.guardarConfig(apagada) }
+    }
+
+    /** Anota en el historial cómo terminó la publicación de una tirada. */
+    private fun onDesenlaceDiscord(desenlace: DesenlaceDiscord) {
+        val marca = if (desenlace.enviada) EnvioDiscord.ENVIADA else EnvioDiscord.NO_ENVIADA
+        if (_uiState.value.historial.none { it.instante == desenlace.instante && it.discord != marca }) return
+        _uiState.update { s ->
+            s.copy(historial = s.historial.map { if (it.instante == desenlace.instante) it.copy(discord = marca) else it })
+        }
+        val historial = _uiState.value.historial
+        viewModelScope.launch { gestorPreferencias.guardarHistorial(historial) }
+    }
+
+    /** Publica la tirada recién terminada, salvo que sea oculta o con los números elegidos a mano. */
+    private fun publicarEnDiscord() {
+        val s = _uiState.value
+        if (!s.discord.activo) return
+        val entrada = s.historial.firstOrNull() ?: return
+        val motivo = when {
+            ocultaEnCurso -> MotivoNoPublicada.OCULTA
+            s.modo == ModoDecision.PREDETERMINADO && s.elegirValores -> MotivoNoPublicada.VALORES_ELEGIDOS
+            else -> null
+        }
+        if (motivo != null) {
+            _uiState.update { it.copy(noPublicada = motivo) }
+            return
+        }
+        publicador.publicar(
+            MensajeTirada(
+                instante = entrada.instante,
+                titulo = entrada.titulo,
+                detalle = entrada.detalle,
+                notacion = entrada.notacion,
+                valores = entrada.valores,
+                sistema = entrada.sistemaNombre,
+                nivel = entrada.nivel,
+                total = s.veredicto?.total,
+                etiqueta = etiquetaEnCurso
+            )
+        )
     }
 
     /** Guarda la mesa actual con un nombre; si el nombre ya existe, la reemplaza. */
@@ -432,13 +543,19 @@ class DiceRollerViewModel(
     fun lanzar(gesto: Gesto? = null) {
         val s = _uiState.value
         if (ocupado || s.pool.isEmpty()) return
+        ocultaEnCurso = ocultaPendiente
+        ocultaPendiente = false
+        etiquetaEnCurso = etiquetaPendiente
+        etiquetaPendiente = null
         instanteToque = System.nanoTime()
         instantePrimerMovimiento = null
         instanteSesionLista = null
         rondas = 0
         acumulados.clear()
         gestorSonido.reiniciarEstadisticas()
-        _uiState.update { it.copy(estaRodando = true, resultados = emptyList(), veredicto = null, metricas = null) }
+        _uiState.update {
+            it.copy(estaRodando = true, resultados = emptyList(), veredicto = null, metricas = null, noPublicada = null)
+        }
         iniciarRonda(s.pool, obstaculos = emptyList(), gesto = gesto, primeraRonda = true)
     }
 
@@ -558,6 +675,8 @@ class DiceRollerViewModel(
         }
         val historial = _uiState.value.historial
         viewModelScope.launch { gestorPreferencias.guardarHistorial(historial) }
+        // Primero queda guardada en el teléfono; publicarla es un paso aparte que puede esperar a la red.
+        publicarEnDiscord()
     }
 
     override fun onCleared() {
@@ -575,7 +694,10 @@ class DiceRollerViewModelFactory(private val context: Context) : ViewModelProvid
         if (modelClass.isAssignableFrom(DiceRollerViewModel::class.java)) {
             val app = context.applicationContext
             @Suppress("UNCHECKED_CAST")
-            return DiceRollerViewModel(GestorSonido(app), GestorHaptico(app), GestorPreferencias(app)) as T
+            val discord = ServicioDiscord.obtener(app)
+            return DiceRollerViewModel(
+                GestorSonido(app), GestorHaptico(app), GestorPreferencias(app), discord.gestor, discord.publicador
+            ) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

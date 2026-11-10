@@ -19,6 +19,12 @@ val VerdeExito = Color(0xFF35CE8D)
 val DoradoLegendario = Color(0xFFFFD700)
 val PurpuraMistico = Color(0xFF9C27B0)
 
+/**
+ * Rojo para texto y marcas chicas sobre fondos oscuros: [RojoFallo] da 2,7:1 contra el fondo de la
+ * app y no llega al mínimo de 3:1; este da 6,3:1.
+ */
+val RojoSobreOscuro = Color(0xFFFF6B6B)
+
 /** Color de los dados con [com.rolesencia.diceroller.domain.dados.RolDado.ESPECIAL] (Hambre, Miedo, Legendario…). */
 val ColorDadoEspecial = Color(0xFFB71C1C)
 

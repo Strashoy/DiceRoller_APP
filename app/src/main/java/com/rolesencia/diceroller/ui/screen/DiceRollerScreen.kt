@@ -107,9 +107,16 @@ import com.rolesencia.diceroller.ui.components.SolapaDados
 import com.rolesencia.diceroller.ui.components.resumenParametros
 import com.rolesencia.diceroller.ui.mesa3d.MesaDados3D
 import com.rolesencia.diceroller.ui.skins.CreadorSkin
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.HorizontalDivider
 import com.rolesencia.diceroller.ui.theme.DarkBlueFantasia
 import com.rolesencia.diceroller.ui.theme.Ivory
+import com.rolesencia.diceroller.ui.theme.NaranjaCostoso
+import com.rolesencia.diceroller.ui.theme.RojoSobreOscuro
+import com.rolesencia.diceroller.ui.theme.VerdeExito
 import com.rolesencia.diceroller.ui.theme.colorDe
+import com.rolesencia.diceroller.ui.viewmodel.AvisoDiscord
+import com.rolesencia.diceroller.ui.viewmodel.avisoDiscord
 import com.rolesencia.diceroller.ui.viewmodel.DiceRollerUiState
 import com.rolesencia.diceroller.ui.viewmodel.DiceRollerViewModel
 
@@ -175,10 +182,24 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
         }
     }
 
+    // Discord rechazó el webhook (lo borraron o cambió): el envío ya se apagó; se avisa una vez.
+    LaunchedEffect(state.avisoWebhookInvalido) {
+        if (state.avisoWebhookInvalido) {
+            avisos.currentSnackbarData?.dismiss()
+            avisos.showSnackbar(
+                "Discord ya no reconoce el webhook y se apagó el envío. Pegá uno nuevo en Ajustes.",
+                duration = SnackbarDuration.Long
+            )
+            // Recién al cerrarse: marcarlo antes reiniciaría este efecto y cortaría el aviso.
+            viewModel.avisoWebhookVisto()
+        }
+    }
+
     // Alto real de las barras superpuestas: la cámara encuadra la mesa en lo que queda libre.
     val densidad = LocalDensity.current
     var altoSuperior by remember { mutableIntStateOf(0) }
     var altoInferior by remember { mutableIntStateOf(0) }
+    var bordeSuperior by remember { mutableIntStateOf(0) }
     val areaUtil = with(densidad) { PaddingValues(top = altoSuperior.toDp(), bottom = altoInferior.toDp()) }
 
     // Mientras ruedan los dados la interfaz se aparta: lo único que importa es la tirada.
@@ -222,6 +243,8 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
             Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
+                // Borde inferior real del bloque, contando el recorte de la cámara (altoSuperior no lo cuenta).
+                .onSizeChanged { bordeSuperior = it.height }
                 .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.65f), Color.Transparent)))
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
                 .onSizeChanged { altoSuperior = it.height }
@@ -236,6 +259,16 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
                 onAjustes = { hoja = Hoja.AJUSTES }
             )
             Marcador(state, hayTorre = torre != null)
+        }
+
+        // Discord: qué pasó con la publicación de la tirada que está en pantalla. Flota debajo del
+        // marcador sin ocupar lugar, para que aparecer y desaparecer no mueva el encuadre de la mesa.
+        state.avisoDiscord?.let { aviso ->
+            IndicadorDiscord(
+                aviso = aviso,
+                enCola = state.estadoDiscord.pendientes.size,
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = with(densidad) { bordeSuperior.toDp() })
+            )
         }
 
         // --- Abajo: zona del pulgar ---
@@ -305,8 +338,10 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
                     ocupado = ocupado,
                     habilitado = !ocupado && state.pool.isNotEmpty(),
                     conservar = state.parametros.conservar,
+                    discordActivo = state.discord.activo,
                     onLanzar = { FeedbackTactil.clickBoton(vista); viewModel.lanzar() },
-                    onLanzarCon = viewModel::lanzarCon
+                    onLanzarCon = viewModel::lanzarCon,
+                    onLanzarOculta = viewModel::lanzarOculta
                 )
                 if (state.manoIzquierda) botonTirada() else botonDados()
             }
@@ -361,6 +396,7 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
             guardadas = state.tiradasGuardadas,
             notacionActual = Notacion.de(state.pool, if (state.sistema.usaModificador) state.parametros.modificador else 0),
             habilitado = !ocupado,
+            pendientesDiscord = state.estadoDiscord.pendientes,
             onRepetir = viewModel::repetir,
             onBorrarHistorial = viewModel::borrarHistorial,
             onLanzarGuardada = viewModel::lanzarGuardada,
@@ -406,6 +442,10 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
             onAgitar = viewModel::toggleAgitar,
             zurdo = state.manoIzquierda,
             onZurdo = viewModel::toggleZurdo,
+            discord = state.discord,
+            pruebaDiscord = state.pruebaDiscord,
+            onDiscord = viewModel::cambiarDiscord,
+            onProbarDiscord = viewModel::probarDiscord,
             onCerrar = cerrar
         )
     }
@@ -521,8 +561,10 @@ private fun BotonLanzar(
     ocupado: Boolean,
     habilitado: Boolean,
     conservar: Conservar,
+    discordActivo: Boolean,
     onLanzar: () -> Unit,
-    onLanzarCon: (Conservar) -> Unit
+    onLanzarCon: (Conservar) -> Unit,
+    onLanzarOculta: () -> Unit
 ) {
     val vista = LocalView.current
     var menu by remember { mutableStateOf(false) }
@@ -573,6 +615,44 @@ private fun BotonLanzar(
                     onClick = { menu = false; onLanzarCon(modo) }
                 )
             }
+            // La tirada del máster detrás de la pantalla: se tira igual pero no va al canal.
+            if (discordActivo) {
+                HorizontalDivider()
+                DropdownMenuItem(
+                    text = { Text("Tirada oculta (no va a Discord)") },
+                    onClick = { menu = false; onLanzarOculta() }
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Píldora chica con el estado de la publicación en Discord. El punto de color acompaña al texto
+ * (verde: llegó; ámbar: espera o no se publica; rojo claro: no se envió), nunca lo reemplaza.
+ */
+@Composable
+private fun IndicadorDiscord(aviso: AvisoDiscord, enCola: Int, modifier: Modifier = Modifier) {
+    val color = when (aviso) {
+        AvisoDiscord.ENVIADA -> VerdeExito
+        AvisoDiscord.NO_ENVIADA -> RojoSobreOscuro
+        else -> NaranjaCostoso
+    }
+    // Si hay más tiradas esperando además de la que está en pantalla, se dice cuántas.
+    val texto = if (aviso == AvisoDiscord.EN_COLA && enCola > 1) "${aviso.texto} · $enCola tiradas" else aviso.texto
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = Color.Black.copy(alpha = 0.6f),
+        contentColor = Ivory,
+        modifier = modifier.semantics { liveRegion = LiveRegionMode.Polite }
+    ) {
+        Row(
+            Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            Box(Modifier.size(8.dp).background(color, CircleShape))
+            Text(texto, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }

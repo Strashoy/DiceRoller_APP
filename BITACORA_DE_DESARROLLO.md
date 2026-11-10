@@ -704,6 +704,107 @@ simples (banco, capa, tono, volumen) en un perfil, en vez de sumar más archivos
 
 ---
 
+## Capítulo 19 · Las tiradas van solas a Discord
+
+**El pedido.** "Quiero implementar una función donde la app envíe automáticamente el resultado de la
+tirada y el desglose de los dados al chat de texto de una sala de Discord", "manteniendo la app
+ligera y respetando mi enfoque offline-first cuando no haya conexión". Llegó junto con un pedido de
+auditoría de UX/UI, y con el celular conectado "para que puedas probar en el celular lo que
+necesites".
+
+**Antes del código: medir en otro teléfono.** Se instaló `main` en un Realme (RMX3709) que tenía una
+versión del 13 de octubre. Con el tamaño de pantalla que tiene configurado mide **320 × 715 dp**,
+bastante más angosto que el Samsung A33 de las pruebas anteriores. Cada control se midió con
+`uiautomator dump` y el contraste se sacó de los píxeles de las capturas. Lo que apareció (y todavía
+no se arregló) está en "Ideas pendientes". Dos hallazgos marcaron el diseño de este capítulo:
+
+- "Fallo" en `RojoFallo` sobre la piedra del castillo da un contraste de **1,15:1** (2,7:1 sobre el
+  fondo liso; el mínimo es 3:1). El indicador de Discord usa un rojo nuevo, `RojoSobreOscuro`, de 6,3:1.
+- En "Resultado predeterminado" los números se pueden elegir a mano. Publicarlos como una tirada le
+  quitaría toda la confianza al canal: esas tiradas no se publican.
+
+**La solución.** Un **webhook** del canal: una URL que crea quien administra el canal (Editar canal →
+Integraciones → Webhooks) y que acepta mensajes por HTTP. No hay bot, cuentas ni servidor propio: la
+app sólo guarda esa URL.
+
+- **Liviana.** Ninguna biblioteca nueva: el pedido sale con `HttpURLConnection` y el JSON se escribe
+  a mano, como los códecs de las preferencias. Lo que sí cambió es el manifiesto: además de
+  `VIBRATE`, ahora pide `INTERNET` y `ACCESS_NETWORK_STATE`.
+- **Primero el teléfono.** La tirada se resuelve y se guarda en el historial igual que antes. Recién
+  después entra en una **bandeja de salida** guardada en DataStore.
+- **Una sola corrutina** (`PublicadorDiscord`) atiende comandos (configurar, publicar, despertar) y,
+  entre comando y comando, envía la primera tirada de la cola. Nunca hay dos envíos a la vez: el
+  canal recibe las tiradas en orden y no hace falta ningún candado.
+- **Las tiradas caducan a los 10 minutos.** Una tirada que aparece en el canal una hora después
+  confunde más de lo que ayuda. El mensaje lleva la hora real de la tirada. La cola guarda hasta 50.
+- **Cuándo se reintenta:** al encolar, al volver la red (`registerDefaultNetworkCallback`) y al
+  abrir la app; sin red, cada 2, 4, 8… hasta 30 segundos.
+
+| Respuesta de Discord | Qué hace la app |
+|---|---|
+| 204 | Enviada: sale de la cola y el historial la marca "Discord · enviada" |
+| 429 | Espera lo que diga `retry_after` (no hay límites escritos en el código, como pide su documentación) |
+| 5xx o sin red | Reintenta con espera creciente mientras no caduque |
+| 404, 401, 403 | El webhook ya no existe: descarta la cola, apaga el envío y avisa. Discord pide no insistir |
+| Otro 4xx | Descarta ese mensaje y sigue con el próximo |
+
+**El mensaje.** Una línea en `content` con todo lo esencial, porque es lo que muestra la notificación
+del teléfono y lo único que ve quien tiene las tarjetas desactivadas:
+`🎲 Espada larga: **Éxito · 19** — 1d20 + 5 → 14`. Un `embed` agrega el color del veredicto, el
+detalle del sistema y la hora. `username` es el nombre que el jugador elige en Ajustes, y
+`allowed_mentions` va vacío: una tirada guardada que se llame "@everyone" no menciona a nadie.
+
+**Lo que nunca se publica.** La **tirada oculta** del máster (una opción nueva al mantener LANZAR,
+que sólo aparece con Discord encendido) y las tiradas con valores elegidos a mano.
+
+**Dónde se ve.** Una píldora debajo del marcador dice qué pasó con la tirada que está en pantalla
+("enviando…", "en cola, sin conexión", "enviada", "no se envió", "tirada oculta"); el historial lo
+guarda en cada entrada; y Ajustes abre con la sección Discord: interruptor, webhook, nombre y
+"Enviar prueba".
+
+**El webhook es un secreto** (quien lo tenga puede escribir en el canal): sólo se aceptan direcciones
+HTTPS de Discord, una vez guardado se muestra enmascarado, vive en un archivo de DataStore aparte
+que queda fuera de la copia de seguridad en la nube, y se puede quitar.
+
+**Problemas y soluciones.**
+
+| Problema | Causa | Solución |
+|---|---|---|
+| El teclado tapaba el campo del webhook | La hoja de Ajustes abre a media altura; cuando aparece el teclado la ventana se achica y la hoja queda en la mitad de lo que queda, con el campo debajo del teclado | Al enfocar un campo, la hoja se abre entera (`sheetState.expand()`). Medido después: el campo queda al 46 % de la altura y el teclado empieza al 60 % |
+| El indicador de Discord pisaba el desglose del marcador | Se ubicó con `altoSuperior`, que se mide después del relleno por el recorte de la cámara y por eso no lo cuenta (36 dp en este teléfono) | Una segunda medida tomada antes del relleno (`bordeSuperior`). `altoSuperior` también define el encuadre de la cámara 3D y quedó como estaba: ver "Ideas pendientes" |
+| No había forma de sacar un webhook guardado | "Cambiar" sólo permitía reemplazarlo | Botón "Quitar el webhook" |
+| Lo que quedaba pendiente de la sesión anterior se habría descartado al abrir la app (detectado al releer el código, antes de compilar) | La primera configuración se tomaba como "cambió el canal" | Sólo cuenta como cambio a partir de la segunda; lo cubre un test |
+| El nombre del jugador se leía desde un hilo y se escribía desde otro (también al releer) | `publicar()` armaba el JSON del lado de la pantalla con la configuración del publicador | El JSON se arma dentro de la corrutina del publicador |
+| Gradle no arrancaba desde la terminal | `JAVA_HOME` no está definido fuera de Android Studio | Apuntarlo al JBR que trae Android Studio (carpeta `jbr`) |
+
+**Verificación.**
+
+- **106 tests** (había 64): 16 del formato del mensaje y la validación del webhook, 7 de la cola y
+  las respuestas, 7 del cliente HTTP contra un servidor local de un solo pedido, 11 del publicador
+  con un Discord de mentira (orden, reintentos, caducidad, webhook borrado, cambio de canal) y uno
+  más del códec del historial.
+- **En el Realme**, con un webhook inventado: "Enviar prueba" hizo el pedido real a discord.com y
+  mostró "Discord no reconoce ese webhook"; la tirada oculta mostró su píldora; una tirada normal
+  terminó con el envío apagado solo, el aviso en pantalla y la entrada del historial marcada
+  "Discord · no se envió", que siguió ahí después de cerrar y abrir la app.
+- **No se probó:** un envío que llegue a un canal de verdad (hace falta un webhook real), cómo se ve
+  el mensaje en Discord, ni cortar la conexión en el teléfono: la cola y los reintentos sólo están
+  cubiertos por los tests.
+
+**Lo que aprendimos.**
+
+- "Offline-first" no quiere decir "entregar siempre". Lo que nunca se pierde es la tirada en el
+  teléfono; para el mensaje hay que decidir cuánto vale llegar tarde, y para un dado vale poco.
+- Una corrutina que atiende una cola de comandos reemplaza a los candados: si sólo ella toca el
+  estado, no hay carreras que cuidar.
+- Otro teléfono encontró en minutos lo que el de siempre no mostraba: textos cortados, el d20 fuera
+  de la fila, el teclado sobre el campo.
+
+**De acá salió…** la lista de hallazgos de la auditoría (en "Ideas pendientes") y la primera prueba
+que falta: pegar un webhook real y ver llegar una tirada al canal.
+
+---
+
 ## Patrones que se repitieron
 
 1. **Imitar lo que haría una persona.** Verter de a poco, golpear la torre, empujar un dado montado,
@@ -753,6 +854,10 @@ Informe de UX sobre gráficos dominantes ──► sin manija lateral, carrusel 
 
 Investigación de apps pagas ──► mesa a pantalla completa (interfaz superpuesta, hojas, inmersivo)
         └─► sus atajos ──► historial, "otra vez", guardadas, ventaja con pulsación larga, agitar, voz
+                └─► "compartir una tirada con el grupo" ──► tiradas a Discord (webhook, bandeja de salida, tirada oculta)
+
+Auditoría en un teléfono de 320 dp ──► hallazgos medidos (contraste del veredicto, d20 fuera de la fila, textos cortados)
+        └─► valores elegidos a mano ──► esas tiradas no se publican en Discord
 ```
 
 ## Ideas pendientes (de dónde salieron)
@@ -765,6 +870,17 @@ Investigación de apps pagas ──► mesa a pantalla completa (interfaz superp
 | Otras aberturas para el cuero (ojos de buey con aro de latón, calado, escudo) | Capítulo 11 (opciones no elegidas). |
 | Que en la bandeja los dados también entren desde fuera de la pantalla | Capítulo 14. |
 | Sugerir skins que contrasten con cada escenario | Capítulo 16. |
+| El total siempre grande y en marfil, con el veredicto como etiqueta; rojo y violeta más claros para "Fallo" y "¡1 natural!" | Capítulo 19: "Fallo" medido en 1,15:1 sobre la piedra del castillo. |
+| CD opcional en d20: sin CD, mostrar sólo el total | Capítulo 19: la CD arranca en 15 y juzga contra un número que nadie dijo. |
+| En el carrusel, primero los dados que están en la mesa | Capítulo 19: en 320 dp entran 4,75 fichas; en d20, el único dado en juego queda fuera de pantalla. |
+| Que no se corten "Suma libre", "d20 contra CD", "+0 · CD 15" ni "Dados · 6" en pantallas angostas | Capítulo 19: los cuatro se cortan en 320 dp. |
+| Guardadas y recientes a un toque, en la franja del pulgar | Capítulo 19: el historial está al 9 % de la altura y lanzar una guardada son 3 toques. |
+| Modificador de a 5, y las mismas palabras para ventaja en la hoja "Tirada" y en LANZAR | Capítulo 19. |
+| "Deshacer" al borrar el historial o una tirada guardada | Capítulo 19: "Borrar historial" queda donde descansa el pulgar y no confirma. |
+| Completar el esquema de colores de Material (chips, botón segmentado y menús salen en un gris violáceo ajeno a la paleta) | Capítulo 19. |
+| La solapa de dados como hoja inferior (hoy abre siempre desde la derecha, también en modo zurdo) | Capítulo 19. |
+| `altoSuperior` y `altoInferior` no cuentan los márgenes del sistema: el encuadre de la cámara y los avisos quedan corridos en teléfonos con recorte | Capítulo 19 (36 dp en el Realme). |
+| Probar Discord con un webhook real y sin conexión en el teléfono | Capítulo 19 (lo que no se pudo verificar). |
 
 Las ideas que salieron de la investigación de la competencia están en
 [INVESTIGACION_COMPETENCIA.md](INVESTIGACION_COMPETENCIA.md) §4.

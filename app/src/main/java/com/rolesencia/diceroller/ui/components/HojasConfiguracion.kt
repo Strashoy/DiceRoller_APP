@@ -23,12 +23,15 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rolesencia.diceroller.domain.dados.DadoEnMesa
+import com.rolesencia.diceroller.domain.discord.ConfigDiscord
 import com.rolesencia.diceroller.domain.reglas.CampoParametro
 import com.rolesencia.diceroller.domain.reglas.Conservar
 import com.rolesencia.diceroller.domain.reglas.ParametrosTirada
@@ -36,6 +39,7 @@ import com.rolesencia.diceroller.sensorial.MaterialMesa
 import com.rolesencia.diceroller.tirada.ModoDecision
 import com.rolesencia.diceroller.ui.theme.DoradoLegendario
 import com.rolesencia.diceroller.ui.viewmodel.MetricasTirada
+import com.rolesencia.diceroller.ui.viewmodel.PruebaDiscord
 
 /** Encabezado común de las hojas inferiores. */
 @Composable
@@ -152,11 +156,17 @@ fun HojaAjustes(
     onAgitar: () -> Unit,
     zurdo: Boolean,
     onZurdo: () -> Unit,
+    discord: ConfigDiscord,
+    pruebaDiscord: PruebaDiscord?,
+    onDiscord: (ConfigDiscord) -> Unit,
+    onProbarDiscord: () -> Unit,
     onCerrar: () -> Unit
 ) {
+    val estadoHoja = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    val alcance = rememberCoroutineScope()
     ModalBottomSheet(
         onDismissRequest = onCerrar,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
+        sheetState = estadoHoja,
         containerColor = MaterialTheme.colorScheme.surfaceVariant
     ) {
         TituloHoja("Ajustes")
@@ -167,6 +177,11 @@ fun HojaAjustes(
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 32.dp)
         ) {
+            Seccion("Discord")
+            // A media altura el teclado taparía el campo que se está escribiendo: al enfocarlo, la
+            // hoja se abre entera y el campo queda a la vista.
+            ApartadoDiscord(discord, pruebaDiscord, onDiscord, onProbarDiscord, alEnfocarCampo = { alcance.launch { estadoHoja.expand() } })
+
             Seccion("Quién decide el número")
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 ModoDecision.entries.forEachIndexed { i, m ->
@@ -223,7 +238,7 @@ fun HojaAjustes(
 }
 
 @Composable
-private fun Interruptor(titulo: String, detalle: String, valor: Boolean, onCambio: () -> Unit) {
+internal fun Interruptor(titulo: String, detalle: String, valor: Boolean, onCambio: () -> Unit) {
     ListItem(
         headlineContent = { Text(titulo) },
         supportingContent = { Text(detalle, fontSize = 12.sp) },

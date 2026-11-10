@@ -3,6 +3,7 @@ package com.rolesencia.diceroller.data
 import com.rolesencia.diceroller.domain.dados.DadoEnMesa
 import com.rolesencia.diceroller.domain.dados.RolDado
 import com.rolesencia.diceroller.domain.dados.TipoDado
+import com.rolesencia.diceroller.domain.discord.EnvioDiscord
 import com.rolesencia.diceroller.domain.historial.EntradaHistorial
 import com.rolesencia.diceroller.domain.historial.TiradaGuardada
 import com.rolesencia.diceroller.domain.reglas.Conservar
@@ -39,6 +40,22 @@ class HistorialCodecTest {
         val vuelta = decodificarHistorial(codificarHistorial(listOf(entrada))).single()
         assertEquals("Total / 7", vuelta.titulo)
         assertEquals("una línea", vuelta.detalle)
+    }
+
+    @Test fun la_marca_de_discord_se_guarda_y_las_lineas_viejas_se_siguen_leyendo() {
+        val entrada = EntradaHistorial(
+            7, "suma", "Suma libre", "2d6", "3 · 4", NivelResultado.NEUTRO,
+            titulo = "7", detalle = "3 + 4", pool = pool, parametros = ParametrosTirada()
+        )
+        val marcadas = listOf(
+            entrada.copy(instante = 1, discord = EnvioDiscord.ENVIADA),
+            entrada.copy(instante = 2, discord = EnvioDiscord.NO_ENVIADA),
+            entrada.copy(instante = 3)
+        )
+        assertEquals(marcadas, decodificarHistorial(codificarHistorial(marcadas)))
+        // Una línea de antes de la integración (diez campos, sin el de Discord).
+        val vieja = codificarHistorial(listOf(entrada)).substringBeforeLast("|")
+        assertEquals(listOf(entrada), decodificarHistorial(vieja))
     }
 
     @Test fun las_tiradas_guardadas_ida_y_vuelta() {

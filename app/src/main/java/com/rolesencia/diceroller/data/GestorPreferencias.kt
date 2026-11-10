@@ -19,6 +19,7 @@ import com.rolesencia.diceroller.domain.apariencia.SkinDado
 import com.rolesencia.diceroller.domain.dados.DadoEnMesa
 import com.rolesencia.diceroller.domain.dados.RolDado
 import com.rolesencia.diceroller.domain.dados.TipoDado
+import com.rolesencia.diceroller.domain.discord.EnvioDiscord
 import com.rolesencia.diceroller.domain.historial.EntradaHistorial
 import com.rolesencia.diceroller.domain.historial.MAX_HISTORIAL
 import com.rolesencia.diceroller.domain.historial.TiradaGuardada
@@ -214,11 +215,15 @@ private fun decodificarParametros(texto: String): ParametrosTirada {
     )
 }
 
-/** "instante|sistemaId|sistemaNombre|notación|valores|nivel|título|detalle|pool|parámetros" */
+/**
+ * "instante|sistemaId|sistemaNombre|notación|valores|nivel|título|detalle|pool|parámetros|discord"
+ * (el último campo es opcional: las líneas guardadas antes de la integración con Discord no lo traen).
+ */
 internal fun codificarHistorial(historial: List<EntradaHistorial>): String = historial.joinToString(SEPARADOR_SKINS) { e ->
     listOf(
         e.instante.toString(), e.sistemaId, limpio(e.sistemaNombre), limpio(e.notacion), limpio(e.valores),
-        e.nivel.name, limpio(e.titulo), limpio(e.detalle), codificarPool(e.pool), codificarParametros(e.parametros)
+        e.nivel.name, limpio(e.titulo), limpio(e.detalle), codificarPool(e.pool), codificarParametros(e.parametros),
+        e.discord?.name.orEmpty()
     ).joinToString("|")
 }
 
@@ -232,7 +237,8 @@ internal fun decodificarHistorial(texto: String, skins: List<SkinDado> = emptyLi
             nivel = runCatching { NivelResultado.valueOf(p[5]) }.getOrNull() ?: NivelResultado.NEUTRO,
             titulo = p[6], detalle = p[7],
             pool = decodificarPool(p[8], skins),
-            parametros = decodificarParametros(p[9])
+            parametros = decodificarParametros(p[9]),
+            discord = p.getOrNull(10)?.let { runCatching { EnvioDiscord.valueOf(it) }.getOrNull() }
         )
     }
 

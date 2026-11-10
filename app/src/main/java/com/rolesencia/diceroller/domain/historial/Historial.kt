@@ -5,6 +5,7 @@ import com.rolesencia.diceroller.domain.dados.DadoEnMesa
 import com.rolesencia.diceroller.domain.dados.ResultadoDado
 import com.rolesencia.diceroller.domain.dados.RolDado
 import com.rolesencia.diceroller.domain.dados.TipoDado
+import com.rolesencia.diceroller.domain.discord.EnvioDiscord
 import com.rolesencia.diceroller.domain.reglas.Conservar
 import com.rolesencia.diceroller.domain.reglas.NivelResultado
 import com.rolesencia.diceroller.domain.reglas.ParametrosTirada
@@ -30,7 +31,9 @@ data class EntradaHistorial(
     val detalle: String,
     /** Lo necesario para repetirla: el pool (codificado como en las preferencias) y los parámetros. */
     val pool: List<DadoEnMesa>,
-    val parametros: ParametrosTirada
+    val parametros: ParametrosTirada,
+    /** Si se publicó en Discord, cómo terminó; null = no se publicó o todavía está saliendo. */
+    val discord: EnvioDiscord? = null
 )
 
 /** Tirada frecuente guardada con nombre ("Espada larga", "Bola de fuego"…). */

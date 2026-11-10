@@ -44,7 +44,11 @@ import com.rolesencia.diceroller.domain.historial.EntradaHistorial
 import com.rolesencia.diceroller.domain.historial.Notacion
 import com.rolesencia.diceroller.domain.historial.TiradaGuardada
 import com.rolesencia.diceroller.domain.reglas.CatalogoSistemas
+import com.rolesencia.diceroller.domain.discord.EnvioDiscord
 import com.rolesencia.diceroller.ui.theme.Ivory
+import com.rolesencia.diceroller.ui.theme.NaranjaCostoso
+import com.rolesencia.diceroller.ui.theme.RojoSobreOscuro
+import com.rolesencia.diceroller.ui.theme.VerdeExito
 import com.rolesencia.diceroller.ui.theme.colorDe
 
 /**
@@ -66,7 +70,9 @@ fun HojaHistorial(
     onLanzarGuardada: (TiradaGuardada) -> Unit,
     onGuardarActual: (String) -> Unit,
     onBorrarGuardada: (TiradaGuardada) -> Unit,
-    onCerrar: () -> Unit
+    onCerrar: () -> Unit,
+    /** Tiradas que todavía esperan publicarse en Discord (por su instante). */
+    pendientesDiscord: Set<Long> = emptySet()
 ) {
     var pestana by remember { mutableIntStateOf(if (historial.isEmpty() && guardadas.isNotEmpty()) 1 else 0) }
     ModalBottomSheet(
@@ -79,7 +85,7 @@ fun HojaHistorial(
             Tab(pestana == 1, { pestana = 1 }, text = { Text("Guardadas · ${guardadas.size}") })
         }
         when (pestana) {
-            0 -> PestanaHistorial(historial, habilitado, onRepetir = { onRepetir(it); onCerrar() }, onBorrarHistorial)
+            0 -> PestanaHistorial(historial, habilitado, pendientesDiscord, onRepetir = { onRepetir(it); onCerrar() }, onBorrarHistorial)
             else -> PestanaGuardadas(
                 guardadas, notacionActual, habilitado,
                 onLanzar = { onLanzarGuardada(it); onCerrar() },
@@ -94,6 +100,7 @@ fun HojaHistorial(
 private fun PestanaHistorial(
     historial: List<EntradaHistorial>,
     habilitado: Boolean,
+    pendientesDiscord: Set<Long>,
     onRepetir: (EntradaHistorial) -> Unit,
     onBorrar: () -> Unit
 ) {
@@ -120,6 +127,14 @@ private fun PestanaHistorial(
                     }
                     Text("${e.notacion}  →  ${e.valores}", fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (e.detalle.isNotBlank()) Text(e.detalle, fontSize = 12.sp, color = Ivory.copy(alpha = 0.7f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    // Qué pasó con su publicación en Discord (nada, si no se publicó).
+                    val discord = when {
+                        e.instante in pendientesDiscord -> "Discord · esperando para enviarse" to NaranjaCostoso
+                        e.discord == EnvioDiscord.ENVIADA -> "Discord · enviada" to VerdeExito
+                        e.discord == EnvioDiscord.NO_ENVIADA -> "Discord · no se envió" to RojoSobreOscuro
+                        else -> null
+                    }
+                    if (discord != null) Text(discord.first, fontSize = 11.sp, color = discord.second, maxLines = 1)
                 }
                 TextButton(onClick = { onRepetir(e) }, enabled = habilitado) { Text("Otra vez") }
             }

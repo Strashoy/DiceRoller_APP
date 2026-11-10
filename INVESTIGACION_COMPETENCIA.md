@@ -64,7 +64,9 @@ Cuáles de estos se implementaron y cómo: bitácora, capítulos 12 y 13.
 | Dados con caras personalizadas (texto, emoji, imagen) | Dice by PCalc |
 | Estadísticas de equidad de los propios dados | DiceShaker 3D |
 | Tiradas guardadas agrupadas por personaje | Dice by PCalc |
-| Compartir una tirada del historial con el grupo | D&D Beyond (dados compartidos) |
+
+"Compartir una tirada con el grupo" (D&D Beyond, dados compartidos) dejó de ser una idea: cada
+tirada se publica sola en el canal de Discord de la mesa (bitácora, capítulo 19).
 
 ## 5. Fuentes
 

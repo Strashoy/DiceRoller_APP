@@ -45,6 +45,9 @@ app/src/main/java/com/rolesencia/diceroller/
 │   ├── GestorSonido.kt             SoundPool: reproduce, limita voces y mide variedad
 │   └── GestorHaptico.kt, FeedbackTactil.kt (portados)
 ├── data/GestorPreferencias.kt      DataStore: sistema, pool, modo, mesa y ajustes
+├── domain/discord/                 Kotlin puro: webhook, mensaje en JSON, cola con caducidad, reintentos
+├── data/discord/                   ClienteWebhook (HttpURLConnection), GestorDiscord (DataStore aparte),
+│                                   PublicadorDiscord (una corrutina, en orden), ServicioDiscord
 └── ui/
     ├── mesa3d/                     Camara, PintorDados (caras, números, sombras), MesaDados3D, IconoDado3D
     │                               DibujoTorre: torre en baldosas ordenadas junto con los dados
@@ -169,6 +172,7 @@ Las dos dependencias 3D ya están declaradas en `gradle/libs.versions.toml` y **
 | 4 | Historial de tiradas (Room), presets por personaje, sistema personalizado, accesibilidad (anuncio del veredicto con TalkBack) | ⏳ |
 | 4b | **Interfaz a pantalla completa**: mesa a sangre, barras superpuestas con área útil para la cámara, hojas inferiores, modo inmersivo (bitácora, cap. 12) | ✅ |
 | 4c | **Atajos de las apps pagas**: historial (50) con "otra vez", tiradas guardadas, notación, ventaja con pulsación larga, agitar para lanzar, voz, deshacer (bitácora, cap. 13) | ✅ |
+| 4d | **Tiradas a Discord**: webhook del canal, bandeja de salida que espera a la red y caduca a los 10 minutos, tirada oculta, marca en el historial (bitácora, cap. 19). Falta probar un envío real contra un webhook propio | ✅ |
 | 5 | Pulido: modelos glTF + SceneView (PBR), materiales de dados, optimización en gama baja, publicación | ⏳ |
 
 ## 8. Fuentes consultadas
