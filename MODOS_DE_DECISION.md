@@ -160,6 +160,7 @@ ligero/pesado, roce y asentamiento). Cada choque del motor pasa por `Planificado
 | **Tono por tamaño** | d4 +7 %, d6 +3 %, d8 0, d10 −2 %, d12 −4 %, d20 −6 %, ± 2,5 % al azar y un leve brillo con la fuerza. |
 | **Paneo estéreo** | Según dónde ocurre el choque en la bandeja (potencia constante). |
 | **Material de mesa elegible** | Tapete (lona) o madera: el piso usa sus 20 tomas; las paredes siempre suenan a madera. |
+| **Perfil acústico por torre** | Con las mismas tomas, cada torre suena distinto. **Madera (taberna)**: aguda y seca (tono +18 %, más tomas fuertes). **Cuero**: apagada (tapete también en las paredes, tono −20 %, casi todo tomas suaves, sin capa de refuerzo, ~70 % de volumen; los choques entre dados también más graves y bajos). **Castillo**: piedra, apenas más grave que la madera. Lo comprueba el test `la_torre_de_madera_suena_aguda_y_la_caja_de_cuero_apagada`. |
 | **Dado contra dado** | Ligero/ligero, pesado/pesado o mezcla; los rozones usan el banco de roce (más grave para dados pesados). |
 | **Asentamiento** | Suena cuando cada dado se duerme. |
 | **Control de densidad** | La misma fuente no se repite antes de 35 ms; máximo 6 sonidos nuevos por cuadro, priorizando los más fuertes; 16 voces. |

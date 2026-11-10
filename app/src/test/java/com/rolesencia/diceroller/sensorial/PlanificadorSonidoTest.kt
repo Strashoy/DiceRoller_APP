@@ -69,4 +69,43 @@ class PlanificadorSonidoTest {
         assertTrue(izquierda.volumenIzq > izquierda.volumenDer)
         assertTrue(derecha.volumenDer > derecha.volumenIzq)
     }
+
+    /** Misma tirada simulada en un perfil: tono y volumen medios, proporción de tomas fuertes y bancos usados. */
+    private fun escuchar(perfil: PerfilAcustico): Triple<Pair<Float, Float>, Float, Set<Categoria>> {
+        val p = PlanificadorSonido(Random(11))
+        val random = Random(12)
+        val dados = TipoDado.entries.mapIndexed { i, t -> DadoEnMesa(i, t) }
+        val disparos = ArrayList<Disparo>()
+        var t = 0f
+        repeat(600) {
+            t += 0.05f
+            val a = dados.random(random)
+            val sup = Superficie.entries.random(random)
+            val ev = EventoColision(
+                a, sup, random.nextFloat() * 250f,
+                if (random.nextInt(10) == 0) TipoEvento.ASENTAMIENTO else TipoEvento.IMPACTO,
+                Vec3(random.nextFloat() * 30f - 15f, 0f, 0f),
+                if (sup == Superficie.DADO) dados.random(random) else null
+            )
+            disparos += p.planificar(ev, perfil, 15f, t)
+        }
+        val superficie = disparos.filter { it.categoria.name.contains("LONA") || it.categoria.name.contains("MADERA") }
+        val fuertes = superficie.count { it.categoria.name.endsWith("FUERTE") }.toFloat() / superficie.size
+        return Triple(disparos.map { it.tono }.average().toFloat() to disparos.map { it.prioridad }.average().toFloat(), fuertes, disparos.map { it.categoria }.toSet())
+    }
+
+    @Test fun la_torre_de_madera_suena_aguda_y_la_caja_de_cuero_apagada() {
+        val (maderaTonoVol, maderaFuertes, _) = escuchar(PerfilAcustico.TABERNA)
+        val (cueroTonoVol, cueroFuertes, cueroBancos) = escuchar(PerfilAcustico.CUERO)
+        println("Madera: tono ${maderaTonoVol.first}, volumen ${maderaTonoVol.second}, fuertes $maderaFuertes")
+        println("Cuero:  tono ${cueroTonoVol.first}, volumen ${cueroTonoVol.second}, fuertes $cueroFuertes")
+        // Bastante más aguda la madera (más de un tercio de diferencia de tono)…
+        assertTrue(maderaTonoVol.first / cueroTonoVol.first > 1.35f)
+        // …más fuerte…
+        assertTrue(cueroTonoVol.second < maderaTonoVol.second * 0.8f)
+        // …con más golpes secos: en el cuero casi todo son tomas suaves…
+        assertTrue(maderaFuertes - cueroFuertes > 0.3f)
+        // …y el cuero nunca suena a madera, ni siquiera en las paredes.
+        assertTrue(cueroBancos.none { it.name.contains("MADERA") })
+    }
 }

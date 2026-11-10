@@ -13,8 +13,54 @@ import kotlin.random.Random
 
 enum class PesoDado { LIGERO, PESADO }
 
-/** Material del piso de la bandeja. Las paredes siempre son de madera. */
+/** Material del piso de la bandeja (sus paredes son de madera). Las torres usan [PerfilAcustico]. */
 enum class MaterialMesa(val titulo: String) { LONA("Tapete"), MADERA("Madera") }
+
+/**
+ * Cómo suena cada lugar donde se lanza, con las mismas 65 grabaciones. Lo que se puede variar sin
+ * grabar nada nuevo: el banco del piso y de las paredes (madera o tapete), la capa (toma suave o
+ * fuerte), el tono (velocidad de reproducción) y el volumen.
+ *
+ * - **Torre de madera (taberna)**: aguda y seca. Madera en todo, tono +18 %, más tomas fuertes.
+ * - **Caja de cuero**: apagada. Tapete también en las paredes (cuero acolchado), tono −20 %, casi
+ *   todo tomas suaves, sin capa de refuerzo y a ~70 % de volumen; los dados entre sí también suenan
+ *   más graves y bajos, amortiguados por el fieltro.
+ * - **Castillo**: piedra, apenas más grave que la madera.
+ * - **Bandeja**: el piso según su superficie y las paredes de madera (como siempre).
+ */
+data class PerfilAcustico(
+    val piso: MaterialMesa,
+    val pared: MaterialMesa,
+    /** Multiplica el tono de todo (velocidad de reproducción): > 1 agudo, < 1 grave. */
+    val tono: Float,
+    /** Se suma a la intensidad sólo para elegir la capa: > 0 más tomas fuertes, < 0 más suaves. */
+    val sesgoFuerza: Float,
+    val volumen: Float,
+    val tonoEntreDados: Float,
+    val volumenEntreDados: Float,
+    /** En golpes muy fuertes, sumar una toma suave como "cuerpo" del sonido. */
+    val capaCuerpo: Boolean
+) {
+    companion object {
+        fun bandeja(piso: MaterialMesa) =
+            PerfilAcustico(piso, MaterialMesa.MADERA, 1f, 0f, 1f, 1f, 1f, capaCuerpo = true)
+
+        val TABERNA = PerfilAcustico(MaterialMesa.MADERA, MaterialMesa.MADERA, tono = 1.18f, sesgoFuerza = 0.18f,
+            volumen = 1f, tonoEntreDados = 1.10f, volumenEntreDados = 1f, capaCuerpo = true)
+        val CASTILLO = PerfilAcustico(MaterialMesa.MADERA, MaterialMesa.MADERA, tono = 0.95f, sesgoFuerza = 0.05f,
+            volumen = 0.95f, tonoEntreDados = 1f, volumenEntreDados = 0.95f, capaCuerpo = true)
+        val CUERO = PerfilAcustico(MaterialMesa.LONA, MaterialMesa.LONA, tono = 0.80f, sesgoFuerza = -0.30f,
+            volumen = 0.70f, tonoEntreDados = 0.85f, volumenEntreDados = 0.65f, capaCuerpo = false)
+
+        /** Perfil del lugar donde se lanza: la torre, o la bandeja según su superficie. */
+        fun para(torre: String?, mesa: MaterialMesa): PerfilAcustico = when (torre) {
+            "madera" -> TABERNA
+            "castillo" -> CASTILLO
+            "cuero" -> CUERO
+            else -> bandeja(mesa)
+        }
+    }
+}
 
 /** Los 13 bancos grabados (5 tomas cada uno = 65 archivos en res/raw). */
 enum class Categoria {
@@ -81,7 +127,11 @@ class PlanificadorSonido(private val random: Random = Random.Default) {
         const val ESPERA_MISMA_FUENTE = 0.035f
     }
 
-    fun planificar(evento: EventoColision, mesa: MaterialMesa, mitadAnchoMesa: Float, ahora: Float): List<Disparo> {
+    /** Bandeja con esa superficie (paredes de madera). */
+    fun planificar(evento: EventoColision, mesa: MaterialMesa, mitadAnchoMesa: Float, ahora: Float): List<Disparo> =
+        planificar(evento, PerfilAcustico.bandeja(mesa), mitadAnchoMesa, ahora)
+
+    fun planificar(evento: EventoColision, perfil: PerfilAcustico, mitadAnchoMesa: Float, ahora: Float): List<Disparo> {
         val intensidad = when (evento.tipo) {
             TipoEvento.IMPACTO -> (evento.velocidad / VELOCIDAD_MAXIMA).coerceIn(0f, 1f)
             TipoEvento.ROCE -> (evento.velocidad / 80f).coerceIn(0f, 1f) * 0.6f
@@ -97,38 +147,41 @@ class PlanificadorSonido(private val random: Random = Random.Default) {
         when {
             evento.tipo == TipoEvento.ASENTAMIENTO -> disparos += disparo(
                 if (peso == PesoDado.LIGERO) Categoria.LIGERO_ASENTAMIENTO else Categoria.PESADO_ASENTAMIENTO,
-                intensidad, 0.75f, evento.dado, paneo
+                intensidad, 0.75f * perfil.volumen, evento.dado, paneo, tonoExtra = perfil.tono
             )
-            evento.superficie == Superficie.DADO -> disparos += disparoEntreDados(evento, intensidad, paneo)
+            evento.superficie == Superficie.DADO -> disparos += disparoEntreDados(evento, intensidad, paneo, perfil)
             else -> {
-                val material = if (evento.superficie == Superficie.PARED) MaterialMesa.MADERA else mesa
-                val fuerte = random.nextFloat() < suavizado(0.25f, 0.55f, intensidad)
-                val eq = if (material == MaterialMesa.LONA) 0.9f else 1f
-                disparos += disparo(banco(material, peso, fuerte), intensidad, eq, evento.dado, paneo)
+                val material = if (evento.superficie == Superficie.PARED) perfil.pared else perfil.piso
+                val fuerte = random.nextFloat() < suavizado(0.25f, 0.55f, intensidad + perfil.sesgoFuerza)
+                val eq = (if (material == MaterialMesa.LONA) 0.9f else 1f) * perfil.volumen
+                disparos += disparo(banco(material, peso, fuerte), intensidad, eq, evento.dado, paneo, tonoExtra = perfil.tono)
                 // Golpe muy fuerte: se suma una toma suave como "cuerpo" del sonido.
-                if (intensidad > 0.75f && fuerte) {
-                    disparos += disparo(banco(material, peso, false), intensidad * 0.4f, eq, evento.dado, paneo)
+                if (perfil.capaCuerpo && intensidad > 0.75f && fuerte) {
+                    disparos += disparo(banco(material, peso, false), intensidad * 0.4f, eq, evento.dado, paneo, tonoExtra = perfil.tono)
                 }
             }
         }
         return disparos
     }
 
-    private fun disparoEntreDados(evento: EventoColision, intensidad: Float, paneo: Float): Disparo {
+    private fun disparoEntreDados(evento: EventoColision, intensidad: Float, paneo: Float, perfil: PerfilAcustico): Disparo {
         val pesoA = pesoDe(evento.dado.tipo)
         val pesoB = evento.otro?.let { pesoDe(it.tipo) } ?: pesoA
         val esRoce = evento.tipo == TipoEvento.ROCE || intensidad < 0.12f
         val pesados = listOf(pesoA, pesoB).count { it == PesoDado.PESADO }
         return if (esRoce) {
             // El banco de roce es de dados ligeros: para los pesados se baja el tono.
-            disparo(Categoria.LIGERO_LIGERO_ROCE, intensidad, 0.6f, evento.dado, paneo, tonoExtra = if (pesados > 0) 0.9f else 1f)
+            disparo(
+                Categoria.LIGERO_LIGERO_ROCE, intensidad, 0.6f * perfil.volumenEntreDados, evento.dado, paneo,
+                tonoExtra = (if (pesados > 0) 0.9f else 1f) * perfil.tonoEntreDados
+            )
         } else {
             val categoria = when (pesados) {
                 0 -> Categoria.LIGERO_LIGERO_IMPACTO
                 2 -> Categoria.PESADO_PESADO_IMPACTO
                 else -> if (random.nextBoolean()) Categoria.LIGERO_LIGERO_IMPACTO else Categoria.PESADO_PESADO_IMPACTO
             }
-            disparo(categoria, intensidad, 0.85f, evento.dado, paneo)
+            disparo(categoria, intensidad, 0.85f * perfil.volumenEntreDados, evento.dado, paneo, tonoExtra = perfil.tonoEntreDados)
         }
     }
 

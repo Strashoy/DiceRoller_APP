@@ -1,5 +1,6 @@
 package com.rolesencia.diceroller.ui.viewmodel
 
+import com.rolesencia.diceroller.sensorial.PerfilAcustico
 import android.content.Context
 import android.os.SystemClock
 import android.util.Log
@@ -105,6 +106,7 @@ class DiceRollerViewModel(
                     vozHabilitada = prefs.vozHabilitada,
                     agitarHabilitado = prefs.agitarHabilitado,
                     manoIzquierda = prefs.manoIzquierda,
+                    pistasQuitar = prefs.pistasQuitar,
                     historial = prefs.historial,
                     tiradasGuardadas = prefs.tiradasGuardadas
                 )
@@ -134,7 +136,8 @@ class DiceRollerViewModel(
                     pantallaCompleta = s.pantallaCompleta,
                     vozHabilitada = s.vozHabilitada,
                     agitarHabilitado = s.agitarHabilitado,
-                    manoIzquierda = s.manoIzquierda
+                    manoIzquierda = s.manoIzquierda,
+                    pistasQuitar = s.pistasQuitar
                 )
             )
         }
@@ -334,6 +337,12 @@ class DiceRollerViewModel(
         guardar()
     }
 
+    /** Se mostró la pista de cómo quitar un dado: se cuenta para no repetirla siempre. */
+    fun registrarPistaQuitar() {
+        _uiState.update { it.copy(pistasQuitar = it.pistasQuitar + 1) }
+        guardar()
+    }
+
     fun toggleZurdo() {
         _uiState.update { it.copy(manoIzquierda = !it.manoIzquierda) }
         guardar()
@@ -481,8 +490,9 @@ class DiceRollerViewModel(
         }
         if (frame.eventos.isEmpty()) return
         val s = _uiState.value
-        val material = s.modeloTorre?.let { ModelosTorre.materialPiso(it) } ?: s.materialMesa
-        if (s.audioHabilitado) gestorSonido.reproducir(frame.eventos, material, s.mesa.ancho / 2f)
+        // Cada lugar suena distinto: la torre de madera aguda y seca, la caja de cuero apagada.
+        val perfil = PerfilAcustico.para(s.modeloTorre, s.materialMesa)
+        if (s.audioHabilitado) gestorSonido.reproducir(frame.eventos, perfil, s.mesa.ancho / 2f)
         if (s.vibracionHabilitada) {
             val golpe = frame.eventos
                 .filter { it.tipo == TipoEvento.IMPACTO && (it.superficie == Superficie.PARED || it.velocidad > 150f) }

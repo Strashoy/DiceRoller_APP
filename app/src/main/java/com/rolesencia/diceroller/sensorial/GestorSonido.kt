@@ -67,10 +67,10 @@ class GestorSonido(context: Context) {
     }
 
     /** Se llama una vez por cuadro con los eventos físicos nuevos. */
-    fun reproducir(eventos: List<EventoColision>, mesa: MaterialMesa, mitadAnchoMesa: Float) {
+    fun reproducir(eventos: List<EventoColision>, perfil: PerfilAcustico, mitadAnchoMesa: Float) {
         if (eventos.isEmpty() || cargados < totalArchivos) return
         val ahora = SystemClock.uptimeMillis() / 1000f
-        val candidatos = eventos.flatMap { planificador.planificar(it, mesa, mitadAnchoMesa, ahora) }
+        val candidatos = eventos.flatMap { planificador.planificar(it, perfil, mitadAnchoMesa, ahora) }
         val elegidos = candidatos.sortedByDescending { it.prioridad }.take(MAX_POR_CUADRO)
         for (d in elegidos) {
             soundPool.play(bancos.getValue(d.categoria)[d.muestra], d.volumenIzq, d.volumenDer, 1, 0, d.tono)

@@ -259,6 +259,16 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
                 onAgregar = { tipo ->
                     FeedbackTactil.clickBoton(vista)
                     viewModel.agregarDado(tipo)
+                    if (state.pistasQuitar < PISTAS_QUITAR) {
+                        viewModel.registrarPistaQuitar()
+                        alcance.launch {
+                            avisos.currentSnackbarData?.dismiss()
+                            avisos.showSnackbar(
+                                "Para quitar un dado, mantenelo apretado (acá o en la mesa) o tocá su −",
+                                duration = SnackbarDuration.Long
+                            )
+                        }
+                    }
                 },
                 onQuitar = { tipo ->
                     val quitado = viewModel.dadoAQuitar(tipo)
@@ -461,6 +471,9 @@ private fun BarraSuperior(
         }
     }
 }
+
+/** Cuántas veces se muestra la pista de cómo quitar un dado. */
+private const val PISTAS_QUITAR = 2
 
 private fun nombreCortoEscenario(id: String?): String = when (id) {
     null -> "Bandeja"

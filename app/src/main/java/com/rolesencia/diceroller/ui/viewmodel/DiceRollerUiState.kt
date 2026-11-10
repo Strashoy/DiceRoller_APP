@@ -83,6 +83,8 @@ data class DiceRollerUiState(
     val agitarHabilitado: Boolean = true,
     /** Controles para zurdos: los botones de los costados de LANZAR cambian de lado. */
     val manoIzquierda: Boolean = false,
+    /** Veces que se mostró "cómo quitar un dado" (se muestra sólo las primeras). */
+    val pistasQuitar: Int = 0,
 
     // Historial (más reciente primero) y tiradas frecuentes guardadas con nombre
     val historial: List<EntradaHistorial> = emptyList(),

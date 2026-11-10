@@ -633,6 +633,77 @@ posible es sugerir, para cada escenario, skins que contrasten con él.
 
 ---
 
+## Capítulo 17 · Que se sepa cómo quitar un dado
+
+**El pedido.** "Hacé que la gente sepa que manteniendo presionado pueda quitar un dado, porque
+actualmente no hay forma de saberlo."
+
+**Por qué pasaba.** La pulsación larga era la única forma de quitar un dado desde el carrusel o la
+mesa, y sólo la mencionaba la pista del marcador en la versión con torre. Rompía una pauta de la
+propia [guía de UX/UI](GUIA_UX_UI.md): todo gesto necesita un control visible.
+
+**La solución, en tres capas.**
+
+- **Un "−" visible** encima del recuadro de cada dado del carrusel que está en la mesa: un círculo
+  rojo, como el de la solapa. Es la forma descubrible de quitar. Toda la franja de arriba, a lo ancho
+  de la ficha, es zona de "quitar", y un espacio libre la separa del recuadro: tocar cerca del "−"
+  nunca agrega un dado por error. Los tipos sin dados reservan ese espacio para que la fila quede
+  alineada.
+- **Una pista en el momento justo**: las dos primeras veces que se agrega un dado desde el carrusel
+  aparece "Para quitar un dado, mantenelo apretado (acá o en la mesa) o tocá su −". La cuenta se
+  guarda en las preferencias, así que después no vuelve a aparecer.
+- **Accesibilidad**: la ficha anuncia sus acciones a TalkBack ("agregar un d6", "quitar un d6").
+
+**Problemas y soluciones.**
+
+| Problema | Causa | Solución |
+|---|---|---|
+| Los "−" en la esquina se veían cortados arriba | La fila de dados recorta lo que sobresale de su alto | Primero se los bajó; después pasaron a su propia franja encima del recuadro, dentro del alto de la fila |
+| Con el "−" arriba en forma de pastilla, no gustaba la forma y un toque cerca podía caer en el recuadro y agregar un dado | Pastilla angosta pegada al recuadro | Círculo como el de la solapa; la franja entera es zona de "quitar" y un espacio la separa del recuadro; la franja toma el ancho de la ficha (`IntrinsicSize.Max`) |
+| El borde de la ficha cruzaba el "−" con una línea | `Modifier.border` se dibuja después del contenido, encima de los hijos | El borde se dibuja por detrás (`drawBehind`) |
+
+**Verificación.** Compila y pasan los 63 tests. En el Samsung A33 se vieron los "−" en cada dado con
+contador y la pista al agregar un dado.
+
+**Lo que aprendimos.** Un gesto oculto necesita, además del control visible, que alguien lo cuente
+justo cuando sirve: la pista aparece al agregar, que es cuando uno puede querer deshacerlo.
+
+---
+
+## Capítulo 18 · Cada torre suena distinto
+
+**El pedido.** "Hacé que con los sonidos que ya tenés en la base de datos, se note una gran
+diferencia entre la torre de madera (con los sonidos más agudos) y la torre de cuero (con los más
+apagados)."
+
+**Cómo estaba.** La torre de madera y el castillo usaban el banco de madera para el piso, el cuero
+el de tapete, y las paredes de todas sonaban a madera: la diferencia era poca.
+
+**La solución.** Un `PerfilAcustico` por lugar. Sin grabar nada nuevo se pueden variar cuatro cosas:
+el banco (madera o tapete), la capa (toma suave o fuerte), el tono (velocidad de reproducción) y el
+volumen.
+
+| | Torre de madera (taberna) | Caja de cuero |
+|---|---|---|
+| Piso y paredes | madera | tapete, también las paredes (cuero acolchado) |
+| Tono | +18 % | −20 % |
+| Capa | sesgo hacia tomas fuertes (golpe seco) | sesgo hacia tomas suaves, sin capa de refuerzo |
+| Volumen | completo | ~70 % |
+| Dado contra dado | +10 % de tono | −15 % de tono, 65 % de volumen (amortiguado por el fieltro) |
+
+El castillo suena a piedra, apenas más grave que la madera; la bandeja sigue igual.
+
+**Verificación.** Un test simula la misma tirada (600 choques) en los dos perfiles: la madera queda
+con tono medio 1,17 contra 0,82 del cuero (43 % más aguda), volumen 0,68 contra 0,46, y 63 % de
+tomas fuertes contra 32 %; el cuero no usa ninguna toma de madera. Pasan los 64 tests. La
+diferencia **de oído** la tiene que confirmar una persona: el test sólo mide lo que se manda a
+reproducir.
+
+**Lo que aprendimos.** Con pocas grabaciones, el "carácter" de un lugar sale de combinar decisiones
+simples (banco, capa, tono, volumen) en un perfil, en vez de sumar más archivos.
+
+---
+
 ## Patrones que se repitieron
 
 1. **Imitar lo que haría una persona.** Verter de a poco, golpear la torre, empujar un dado montado,
@@ -677,6 +748,8 @@ Lanzador de un dado ──► muchos dados + reglas de rol
 Informe de UX sobre gráficos dominantes ──► sin manija lateral, carrusel de dados, saltar la tirada, modo zurdo
         └─► carrusel con dados 3D y resultados grandes ──► mantener apretado en la mesa también quita
                 └─► amarillo fijo y dados de la misma gama ──► acento y paleta "Por tipo" por ambiente
+        └─► "no hay forma de saber que se puede quitar" ──► "−" visible, pista en el momento justo
+        └─► torres que suenan parecido ──► perfil acústico por lugar (madera aguda, cuero apagado)
 
 Investigación de apps pagas ──► mesa a pantalla completa (interfaz superpuesta, hojas, inmersivo)
         └─► sus atajos ──► historial, "otra vez", guardadas, ventaja con pulsación larga, agitar, voz
