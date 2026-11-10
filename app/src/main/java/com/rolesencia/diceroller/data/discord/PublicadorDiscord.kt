@@ -43,14 +43,14 @@ data class DesenlaceDiscord(val instante: Long, val enviada: Boolean)
  */
 class PublicadorDiscord(
     private val almacen: AlmacenCola,
-    private val enviar: suspend (url: String, cuerpo: String) -> ResultadoEnvio,
+    private val enviar: suspend (url: String, cuerpo: String, imagen: ByteArray?) -> ResultadoEnvio,
     alcance: CoroutineScope,
     private val reintento: PoliticaReintento = PoliticaReintento(),
     private val ahora: () -> Long = System::currentTimeMillis
 ) {
     private sealed interface Comando {
         data class Configurar(val config: ConfigDiscord) : Comando
-        data class Publicar(val mensaje: MensajeTirada) : Comando
+        data class Publicar(val mensaje: MensajeTirada, val conImagen: Boolean, val animada: Boolean) : Comando
         data object Despertar : Comando
     }
 
@@ -80,8 +80,12 @@ class PublicadorDiscord(
         comandos.trySend(Comando.Configurar(config))
     }
 
-    fun publicar(mensaje: MensajeTirada) {
-        comandos.trySend(Comando.Publicar(mensaje))
+    /**
+     * [conImagen]: la foto de la tirada ya está guardada en el almacén con el instante del mensaje.
+     * Si para cuando le toque salir la foto no está, el mensaje sale igual, sin ella.
+     */
+    fun publicar(mensaje: MensajeTirada, conImagen: Boolean = false, animada: Boolean = false) {
+        comandos.trySend(Comando.Publicar(mensaje, conImagen, animada))
     }
 
     /** Volvió la red (o se abrió la app): no esperar el próximo reintento. */
@@ -91,7 +95,7 @@ class PublicadorDiscord(
 
     /** Botón "Enviar prueba": un mensaje directo, fuera de la cola. */
     suspend fun probar(config: ConfigDiscord): ResultadoEnvio =
-        enviar(config.webhook.trim(), FormatoDiscord.cuerpoPrueba(config.jugador, ahora()))
+        enviar(config.webhook.trim(), FormatoDiscord.cuerpoPrueba(config.jugador, ahora()), null)
 
     private suspend fun bucle() {
         cola = almacen.leerCola()
@@ -127,12 +131,15 @@ class PublicadorDiscord(
                         esperaFirme = false
                     }
                     is Comando.Publicar -> if (config.activo) {
-                        val nueva = PendienteDiscord(comando.mensaje.instante, FormatoDiscord.cuerpo(comando.mensaje, config.jugador))
+                        val nueva = PendienteDiscord(
+                            comando.mensaje.instante,
+                            FormatoDiscord.cuerpo(comando.mensaje, config.jugador, comando.conImagen, comando.animada)
+                        )
                         val corte = ColaDiscord.agregar(cola, nueva)
                         cola = corte.cola
-                        corte.descartadas.forEach { _desenlaces.tryEmit(DesenlaceDiscord(it.instante, false)) }
+                        corte.descartadas.forEach { soltar(it) }
                         almacen.guardarCola(cola)
-                    } else _desenlaces.tryEmit(DesenlaceDiscord(comando.mensaje.instante, false))
+                    } else soltar(PendienteDiscord(comando.mensaje.instante, ""))
                     Comando.Despertar -> if (!esperaFirme) esperaMs = 0
                 }
                 publicarEstado()
@@ -143,7 +150,7 @@ class PublicadorDiscord(
             val corte = ColaDiscord.vigentes(cola, ahora())
             if (corte.descartadas.isNotEmpty()) {
                 cola = corte.cola
-                corte.descartadas.forEach { _desenlaces.tryEmit(DesenlaceDiscord(it.instante, false)) }
+                corte.descartadas.forEach { soltar(it) }
                 almacen.guardarCola(cola)
                 publicarEstado()
             }
@@ -155,7 +162,10 @@ class PublicadorDiscord(
             }
             if (fase != FaseDiscord.REINTENTANDO) fase = FaseDiscord.ENVIANDO
             publicarEstado()
-            when (val resultado = enviar(config.webhook.trim(), primera.cuerpo)) {
+            // La foto viaja si sigue en el almacén; si no, la tarjeta sale sin la referencia a ella.
+            val imagen = almacen.leerImagen(primera.instante)
+            val cuerpo = if (imagen == null) FormatoDiscord.sinImagen(primera.cuerpo) else primera.cuerpo
+            when (val resultado = enviar(config.webhook.trim(), cuerpo, imagen)) {
                 ResultadoEnvio.Enviado -> {
                     quitar(primera, enviada = true)
                     fase = FaseDiscord.REPOSO
@@ -169,7 +179,9 @@ class PublicadorDiscord(
                     fase = FaseDiscord.REINTENTANDO
                 }
                 is ResultadoEnvio.Rechazado -> {
-                    quitar(primera, enviada = false)
+                    // Si lo rechazado llevaba foto (demasiado pesada, por ejemplo), se intenta una vez
+                    // más sin ella: la tirada importa más que su imagen.
+                    if (imagen != null) almacen.borrarImagen(primera.instante) else quitar(primera, enviada = false)
                     fase = FaseDiscord.REPOSO
                     intento = 0
                     esperaFirme = false
@@ -190,6 +202,7 @@ class PublicadorDiscord(
     private suspend fun quitar(pendiente: PendienteDiscord, enviada: Boolean) {
         cola = cola - pendiente
         almacen.guardarCola(cola)
+        almacen.borrarImagen(pendiente.instante)
         _desenlaces.tryEmit(DesenlaceDiscord(pendiente.instante, enviada))
     }
 
@@ -197,7 +210,13 @@ class PublicadorDiscord(
         if (pendientes.isEmpty()) return
         cola = cola - pendientes.toSet()
         almacen.guardarCola(cola)
-        pendientes.forEach { _desenlaces.tryEmit(DesenlaceDiscord(it.instante, false)) }
+        pendientes.forEach { soltar(it) }
+    }
+
+    /** Una tirada que no se va a enviar: se avisa y se borra su foto. */
+    private suspend fun soltar(pendiente: PendienteDiscord) {
+        almacen.borrarImagen(pendiente.instante)
+        _desenlaces.tryEmit(DesenlaceDiscord(pendiente.instante, false))
     }
 
     private fun publicarEstado() {

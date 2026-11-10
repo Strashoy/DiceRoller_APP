@@ -130,6 +130,22 @@ class DiscordFormatoTest {
         assertEquals("1970-01-02T01:02:03.004Z", FormatoDiscord.instanteIso(86_400_000L + 3_723_004L))
     }
 
+    @Test fun con_foto_la_tarjeta_muestra_el_adjunto() {
+        val adjunto = ",\"image\":{\"url\":\"attachment://tirada.jpg\"}"
+        val sin = FormatoDiscord.cuerpo(ataque, "Thorin")
+        val con = FormatoDiscord.cuerpo(ataque, "Thorin", conImagen = true)
+        assertFalse(sin.contains("attachment://"))
+        assertTrue(con.contains("\"footer\":{\"text\":\"d20 contra CD (D&D 5e)\"}$adjunto,\"timestamp\""))
+        // Quitarle la referencia deja exactamente el mensaje sin foto.
+        assertEquals(sin, FormatoDiscord.sinImagen(con))
+        assertEquals(sin, FormatoDiscord.sinImagen(sin))
+        // La tirada animada se adjunta con otro nombre, y también se puede quitar.
+        val animada = FormatoDiscord.cuerpo(ataque, "Thorin", conImagen = true, animada = true)
+        assertTrue(animada.contains("\"image\":{\"url\":\"attachment://tirada.gif\"}"))
+        assertEquals(sin, FormatoDiscord.sinImagen(animada))
+        assertEquals(sin, FormatoDiscord.cuerpo(ataque, "Thorin", conImagen = false, animada = true))
+    }
+
     @Test fun el_mensaje_de_prueba_aclara_que_no_es_una_tirada() {
         val cuerpo = FormatoDiscord.cuerpoPrueba("Thorin", 0)
         assertTrue(cuerpo.contains("\"username\":\"Thorin\""))

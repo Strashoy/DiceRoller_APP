@@ -44,7 +44,22 @@ object FormatoDiscord {
 
     private const val DADO = "🎲"   // 🎲
 
-    fun cuerpo(mensaje: MensajeTirada, jugador: String = ""): String {
+    /** Nombre con el que se adjunta la foto de la tirada; la tarjeta la muestra con `attachment://`. */
+    const val ARCHIVO_IMAGEN = "tirada.jpg"
+    /** Lo mismo cuando lo adjunto es la tirada animada. */
+    const val ARCHIVO_ANIMACION = "tirada.gif"
+    private const val FRAGMENTO_IMAGEN = ",\"image\":{\"url\":\"attachment://$ARCHIVO_IMAGEN\"}"
+    private const val FRAGMENTO_ANIMACION = ",\"image\":{\"url\":\"attachment://$ARCHIVO_ANIMACION\"}"
+
+    /**
+     * El mismo cuerpo sin la referencia a la foto. Se usa cuando la foto ya no está (la caché del
+     * teléfono se limpió mientras la tirada esperaba): una tarjeta que apunta a un adjunto que no
+     * viaja se vería rota.
+     */
+    fun sinImagen(cuerpo: String): String = cuerpo.replace(FRAGMENTO_IMAGEN, "").replace(FRAGMENTO_ANIMACION, "")
+
+    /** [conImagen]: el mensaje lleva un adjunto; [animada]: ese adjunto es el GIF y no la foto. */
+    fun cuerpo(mensaje: MensajeTirada, jugador: String = "", conImagen: Boolean = false, animada: Boolean = false): String {
         val etiqueta = mensaje.etiqueta?.trim().orEmpty()
         val contenido = buildString {
             append(DADO).append(' ')
@@ -55,7 +70,8 @@ object FormatoDiscord {
             if (mensaje.valores.isNotBlank() && mensaje.valores != mensaje.titulo) append(" → ").append(mensaje.valores)
         }
         val descripcion = mensaje.detalle.ifBlank { mensaje.valores }
-        return armar(contenido, jugador, descripcion, color(mensaje.nivel), mensaje.sistema, mensaje.instante)
+        val adjunto = if (!conImagen) null else if (animada) FRAGMENTO_ANIMACION else FRAGMENTO_IMAGEN
+        return armar(contenido, jugador, descripcion, color(mensaje.nivel), mensaje.sistema, mensaje.instante, adjunto)
     }
 
     /** Mensaje del botón "Enviar prueba": confirma que el webhook funciona sin tirar nada. */
@@ -86,7 +102,10 @@ object FormatoDiscord {
         NivelResultado.NEUTRO -> COLOR_NEUTRO
     }
 
-    private fun armar(contenido: String, jugador: String, descripcion: String, color: Int, pie: String, instante: Long): String =
+    private fun armar(
+        contenido: String, jugador: String, descripcion: String, color: Int, pie: String, instante: Long,
+        adjunto: String? = null
+    ): String =
         buildString {
             append("{\"content\":").append(textoJson(recortar(contenido, MAX_CONTENIDO)))
             val nombre = jugador.trim()
@@ -96,6 +115,7 @@ object FormatoDiscord {
             if (descripcion.isNotBlank()) append("\"description\":").append(textoJson(recortar(descripcion, MAX_DESCRIPCION))).append(',')
             append("\"color\":").append(color)
             if (pie.isNotBlank()) append(",\"footer\":{\"text\":").append(textoJson(recortar(pie, MAX_PIE))).append('}')
+            if (adjunto != null) append(adjunto)
             append(",\"timestamp\":").append(textoJson(instanteIso(instante)))
             append("}]}")
         }

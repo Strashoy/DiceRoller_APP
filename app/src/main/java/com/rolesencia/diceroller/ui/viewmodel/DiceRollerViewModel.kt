@@ -16,7 +16,9 @@ import com.rolesencia.diceroller.data.discord.GestorDiscord
 import com.rolesencia.diceroller.data.discord.PublicadorDiscord
 import com.rolesencia.diceroller.data.discord.ServicioDiscord
 import com.rolesencia.diceroller.domain.apariencia.CatalogoSkins
+import com.rolesencia.diceroller.domain.discord.AnimacionDiscord
 import com.rolesencia.diceroller.domain.discord.ConfigDiscord
+import com.rolesencia.diceroller.domain.reglas.NivelResultado
 import com.rolesencia.diceroller.domain.discord.EnvioDiscord
 import com.rolesencia.diceroller.domain.discord.MensajeTirada
 import com.rolesencia.diceroller.domain.discord.ResultadoEnvio
@@ -55,6 +57,8 @@ import com.rolesencia.diceroller.tirada.torre.ModelosTorre
 import com.rolesencia.diceroller.tirada.predeterminada.PreSimulador
 import com.rolesencia.diceroller.tirada.predeterminada.SesionResultadoPredeterminado
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -95,6 +99,9 @@ class DiceRollerViewModel(
     private var ocultaEnCurso = false
     private var etiquetaPendiente: String? = null
     private var etiquetaEnCurso: String? = null
+    /** Mensaje armado que espera la foto de la mesa, y el plazo después del cual sale sin ella. */
+    private var mensajeEnEspera: MensajeTirada? = null
+    private var plazoFoto: Job? = null
 
     init {
         viewModelScope.launch {
@@ -513,19 +520,59 @@ class DiceRollerViewModel(
             _uiState.update { it.copy(noPublicada = motivo) }
             return
         }
-        publicador.publicar(
-            MensajeTirada(
-                instante = entrada.instante,
-                titulo = entrada.titulo,
-                detalle = entrada.detalle,
-                notacion = entrada.notacion,
-                valores = entrada.valores,
-                sistema = entrada.sistemaNombre,
-                nivel = entrada.nivel,
-                total = s.veredicto?.total,
-                etiqueta = etiquetaEnCurso
-            )
+        val mensaje = MensajeTirada(
+            instante = entrada.instante,
+            titulo = entrada.titulo,
+            detalle = entrada.detalle,
+            notacion = entrada.notacion,
+            valores = entrada.valores,
+            sistema = entrada.sistemaNombre,
+            nivel = entrada.nivel,
+            total = s.veredicto?.total,
+            etiqueta = etiquetaEnCurso
         )
+        if (!s.discord.conFoto) {
+            publicador.publicar(mensaje)
+            return
+        }
+        // Con foto: la mesa tarda cerca de un segundo en llegar a la toma cenital. Se la espera un
+        // plazo corto; si no llega (se tiró de nuevo, se abrió una hoja, la app quedó en segundo
+        // plano), la tirada sale igual, sin imagen.
+        soltarEspera(publicar = true)
+        mensajeEnEspera = mensaje
+        // La tirada animada: siempre, o sólo en los críticos y las pifias, según lo elegido en Ajustes.
+        val animada = when (s.discord.animacion) {
+            AnimacionDiscord.SIEMPRE -> true
+            AnimacionDiscord.CRITICOS -> entrada.nivel == NivelResultado.EXITO_CRITICO || entrada.nivel == NivelResultado.FALLO_CRITICO
+            AnimacionDiscord.NUNCA -> false
+        }
+        _uiState.update { it.copy(fotoPedida = mensaje.instante, fotoAnimada = animada) }
+        plazoFoto = viewModelScope.launch {
+            delay(if (animada) PLAZO_ANIMACION_MS else PLAZO_FOTO_MS)
+            soltarEspera(publicar = true)
+        }
+    }
+
+    /** La mesa entregó la imagen de la tirada [clave]: la tarjeta en JPEG, o el GIF si [animado]; null si falló. */
+    fun fotoLista(clave: Long, imagen: ByteArray?, animado: Boolean) {
+        val mensaje = mensajeEnEspera?.takeIf { it.instante == clave } ?: return
+        plazoFoto?.cancel()
+        mensajeEnEspera = null
+        viewModelScope.launch {
+            val guardada = imagen != null && gestorDiscord.guardarImagen(clave, imagen)
+            publicador.publicar(mensaje, conImagen = guardada, animada = guardada && animado)
+            _uiState.update { if (it.fotoPedida == clave) it.copy(fotoPedida = null) else it }
+        }
+    }
+
+    /** Deja de esperar la foto; [publicar]: el mensaje que esperaba sale sin imagen. */
+    private fun soltarEspera(publicar: Boolean) {
+        plazoFoto?.cancel()
+        plazoFoto = null
+        val mensaje = mensajeEnEspera
+        mensajeEnEspera = null
+        if (mensaje != null && publicar) publicador.publicar(mensaje)
+        _uiState.update { if (it.fotoPedida != null) it.copy(fotoPedida = null) else it }
     }
 
     /** Guarda la mesa actual con un nombre; si el nombre ya existe, la reemplaza. */
@@ -577,6 +624,8 @@ class DiceRollerViewModel(
     fun lanzar(gesto: Gesto? = null) {
         val s = _uiState.value
         if (ocupado || s.pool.isEmpty()) return
+        // Si la tirada anterior esperaba su foto, ya no la va a tener: sale ahora, antes que esta.
+        soltarEspera(publicar = true)
         ocultaEnCurso = ocultaPendiente
         ocultaPendiente = false
         etiquetaEnCurso = etiquetaPendiente
@@ -720,6 +769,10 @@ class DiceRollerViewModel(
 
     private companion object {
         const val TAG = "DiceRoller"
+        /** Cuánto se espera la foto de la mesa antes de publicar la tirada sin ella. */
+        const val PLAZO_FOTO_MS = 3_000L
+        /** La animación hay que dibujarla y codificarla: se le da más tiempo. */
+        const val PLAZO_ANIMACION_MS = 25_000L
     }
 }
 

@@ -860,6 +860,171 @@ estado que reaparece al abrir una hoja y el orden del desglose respecto de las f
 
 ---
 
+## Capítulo 21 · El teclado cerraba la app
+
+**El pedido.** "Teniendo el webhook copiado en el portapapeles y querer ingresarlo en la aplicación
+se cierra la aplicación. Soluciona el problema."
+
+**Qué pasaba.** No era el portapapeles: era el teclado. El registro de cierres del teléfono
+(`adb logcat -b crash`) mostraba la misma excepción dos veces:
+
+```
+IllegalArgumentException: ending radius must be > 0
+    at android.graphics.RadialGradient.<init>
+    at …EscenaTorre.dibujarLlama(DibujoTorre.kt:479)
+```
+
+La cadena completa, de la causa al síntoma:
+
+1. En el capítulo 20 las barras de la pantalla pasaron a medirse **con** los márgenes del sistema,
+   para arreglar el encuadre en teléfonos con recorte de cámara.
+2. Esos márgenes eran `WindowInsets.safeDrawing`, que además de las barras y el recorte **incluye el
+   teclado**. Al tocar un campo de texto, la barra inferior "crecía" unos 280 dp.
+3. A la mesa 3D le quedaba un alto útil negativo. `MesaDados3D` ya lo limitaba a 1 px, pero la cámara
+   le resta 6 px de margen de cada lado: `(1 − 12) / alto de la escena` da una **escala negativa**.
+4. Con escala negativa, el halo de la antorcha del castillo tiene radio negativo, y Android no
+   acepta un degradé radial de radio menor o igual a cero.
+
+Sólo pasaba con la mesa en vista general, que es cuando se dibujan las antorchas, y con una torre
+elegida. Por eso el celular lo mostró recién al cargar un webhook nuevo, con la app recién abierta.
+
+**La solución, en dos capas.**
+
+- **El origen:** las barras de la pantalla usan las barras del sistema y el recorte de la cámara,
+  sin el teclado (`WindowInsets.systemBars.union(WindowInsets.displayCutout)`). Esta pantalla no
+  tiene campos de texto: el teclado sólo aparece dentro de una hoja, y la mesa no tiene por qué
+  enterarse.
+- **El blindaje:** `Camara.encuadre` nunca devuelve una escala cero o negativa, por chica que sea el
+  área que le den. Si otra vez algo deja a la mesa sin lugar, la escena se dibuja diminuta un
+  instante en vez de cerrar la app.
+
+**Problemas y soluciones.**
+
+| Problema | Causa | Solución |
+|---|---|---|
+| La app se cerraba al abrirse el teclado | La barra inferior se medía incluyendo el teclado y la mesa quedaba sin alto útil | Márgenes sin el teclado |
+| Un área útil de 1 px igual daba escala negativa | La cámara resta el margen después del límite de 1 px | El límite se aplica al área ya descontado el margen, y también al tamaño de la escena |
+| El mismo cierre había aparecido a las 18:59, durante las pruebas del capítulo 20, y pasó de largo | La app desapareció en medio de un gesto de deslizar y se dio por hecho que el gesto la había mandado al inicio, sin mirar el registro | Ahora cada tanda de pruebas en el teléfono termina contando los cierres registrados |
+| TalkBack leía "Tirada: Tirada" en los sistemas sin modificador (visto de paso) | El botón anteponía "Tirada:" a un resumen que ya decía "Tirada" | Sólo se antepone cuando hay algo que resumir |
+
+**Verificación.** 121 tests (4 nuevos de la cámara: sin lugar, con área cero o negativa y al pasar a
+la cenital, la escala sigue siendo positiva). En el Realme, con el castillo y la mesa en vista
+general: tocar el campo del webhook abre el teclado sin cerrar la app; "Pegar" tomó el webhook del
+portapapeles; con el nombre "Fluke", "Enviar prueba" respondió "Llegó"; una tirada mostró
+"Discord · enviada" y quedó marcada en el historial; una tirada oculta no se envió; salir al inicio
+y volver, sin cierres. **Es el primer envío real**: lo que faltaba verificar del capítulo 19. Cómo
+se ve el mensaje dentro de Discord no se pudo ver desde acá, y cortar la conexión en el teléfono
+sigue sin probarse.
+
+**Lo que aprendimos.**
+
+- `safeDrawing` incluye el teclado. Para un contenido que no tiene dónde escribir, los márgenes que
+  corresponden son los de las barras y el recorte.
+- Un límite ("al menos 1 px") protege sólo hasta la próxima resta. El lugar para garantizar que un
+  número sea positivo es donde se usa, no tres pasos antes.
+- Si una app desaparece durante una prueba, primero se mira el registro de cierres. Suponer otra
+  causa costó que el error llegara al usuario.
+
+---
+
+## Capítulo 22 · La foto de la tirada en Discord
+
+**El pedido.** "Incluime alguna imagen o gif que aparezca en ese canal de Discord con la tirada de
+forma más atractiva y diferencial a cualquier bot de tiradas de Discord."
+
+**La idea.** Un bot de dados sólo puede escribir números o mostrar dados genéricos. Esta app tiene
+algo que ningún bot tiene: **los dados del jugador, con su skin, tal como cayeron en su mesa**.
+Entonces el mensaje lleva esa foto: la toma cenital del resultado, y debajo una franja con el total
+en grande, el veredicto en su color, la notación, el sistema y la firma "DICE ROLLER".
+
+**Cómo se hace.**
+
+- **La captura.** Mientras hay una foto pedida, el lienzo de la mesa se graba en una capa gráfica
+  (`rememberGraphicsLayer`). Cuando la cámara termina de bajar a la toma cenital (1,1 s después de
+  terminar la tirada) se esperan dos cuadros y la capa se copia a una imagen.
+- **La tarjeta** (`TarjetaTirada`, con `android.graphics`, en un hilo de fondo): recorta el área que
+  no tapa la interfaz, que es donde la cámara encuadra los dados; la lleva a 960 px de ancho; agrega
+  la franja del resultado y la comprime en JPEG. Pesa unos **60 KB**.
+- **El envío.** Con foto, el pedido al webhook es un formulario de dos partes (`payload_json` y
+  `files[0]`) y la tarjeta del mensaje la muestra con `attachment://tirada.jpg`. Sigue saliendo con
+  `HttpURLConnection`, sin bibliotecas.
+- **La espera.** La tirada ya no se publica en el instante en que termina: espera la foto hasta
+  **3 segundos**. Si no llega (se tiró de nuevo, se volvió a la vista general, la app quedó en segundo
+  plano), sale igual, sin imagen. Tirar de nuevo publica primero la anterior: el orden no cambia.
+- **Sin conexión.** La foto se guarda en la caché, junto a la cola. Si el sistema la borra antes de
+  que salga, el mensaje se envía sin la referencia al adjunto; si Discord rechaza el mensaje con foto,
+  se reintenta una vez sin ella. Al enviarse o descartarse la tirada, su foto se borra.
+- En Ajustes → Discord, "Adjuntar la foto de la tirada" (encendido por defecto) permite apagarla.
+
+**Problemas y soluciones.**
+
+| Problema | Causa | Solución |
+|---|---|---|
+| En la primera tarjeta, el total tapaba el dado que había quedado más abajo | El resultado se escribía sobre la foto, encima de un degradé | La foto arriba y el resultado en una franja propia, separada por una línea del color del veredicto |
+| La foto no puede sacarse cuando termina la tirada | En ese momento la cámara recién empieza a bajar a la toma cenital | El pedido de foto viaja en el estado de la pantalla y la mesa responde cuando la cámara llegó |
+
+**Verificación.** 127 tests (6 nuevos: la foto viaja y después se borra, tirada sin foto si la foto
+se perdió, reintento sin foto ante un rechazo, descarte que no deja la foto, formulario de dos partes
+contra el servidor local, y el JSON con y sin adjunto). En el Realme, con el webhook real: dos
+tiradas con foto mostraron "Discord · enviando…" y, un segundo después, "Discord · enviada"; las
+tarjetas generadas (61 y 65 KB) se trajeron del teléfono y se revisaron. **No se pudo ver** cómo
+queda el mensaje dentro de Discord, y el interruptor para apagar la foto no se probó en el teléfono.
+
+**Lo que aprendimos.** Para diferenciarse no hace falta agregar algo: alcanza con mostrar lo que la
+app ya tiene y los demás no. La física y las skins existían; faltaba sacarlas de la pantalla.
+
+**De acá salió…** dos ideas, en "Ideas pendientes": un GIF de la tirada rodando, y conectar la app
+con Discord sin copiar un enlace de webhook.
+
+---
+
+## Capítulo 23 · La tirada animada: un GIF hecho en el teléfono
+
+**El pedido.** "¿Hay forma de pasar alguna animación para que la gente pueda disfrutar de una
+parcial experiencia dentro de Discord?"
+
+**La solución.** Un GIF adjunto al mensaje. Discord reproduce los GIF solos y en bucle dentro del
+chat (un video hay que tocarlo). Muestra el final de la caída de los dados, la cámara bajando a la
+toma cenital y la tarjeta con el resultado, sostenida 2,8 segundos antes de repetirse.
+
+- **No se graba la pantalla.** Copiar el lienzo en cada cuadro mientras ruedan los dados trabaría la
+  tirada. Durante la tirada la mesa sólo guarda las posiciones de los dados de los últimos 2,5
+  segundos (una lista por cuadro). Con la tirada terminada, `AnimacionTirada` vuelve a dibujar la
+  escena en chico (400 px de ancho, 12 cuadros por segundo) en un hilo de fondo.
+- **El mismo dibujo, en dos lugares.** El código que pintaba la mesa dentro del `Canvas` de la
+  pantalla pasó a una función (`dibujarMesa`) que recibe la cámara "a medio bajar" como un número de
+  0 a 1. La pantalla y la animación llaman a la misma función: lo que se ve en Discord es lo que se
+  vio en el teléfono.
+- **El codificador.** Android no trae uno de GIF, así que se escribió (`CodificadorGif`, Kotlin
+  puro): paleta de 255 colores por corte de mediana, compresión LZW y, en cada cuadro, sólo el
+  rectángulo que cambió respecto del anterior, con los píxeles iguales como transparentes.
+- **La opción.** En Ajustes → Discord, "Tirada animada (GIF)": Nunca (queda la foto), Críticos (sólo
+  críticos y pifias) o Siempre. Viene en "Nunca".
+- Si la tirada se saltó tocando la mesa no hay caída grabada: la animación es sólo la bajada de la
+  cámara. Si armar el GIF falla, se envía la foto.
+
+**Problemas y soluciones.**
+
+| Problema | Causa | Solución |
+|---|---|---|
+| El dibujo de la mesa no se podía usar fuera de la pantalla | Estaba escrito dentro del `Canvas`, leyendo estados de Compose | Se extrajo a `dibujarMesa`, que sólo recibe datos |
+| Dibujar desde otro hilo con las piezas de la pantalla | El pintor de dados guarda pinceles y matrices, y los símbolos del Legendario son `Drawable` que no se pueden usar desde dos hilos | La animación crea su propio pintor, su propia escena y sus propios símbolos; las cachés compartidas (tipografías, vetas) pasaron a mapas concurrentes |
+| Un test de la paleta fallaba: el gris 141 salía 132 | El color más cercano se buscaba con el primer píxel de cada grupo de 15 bits; en un empate ganaba el vecino | Se busca con el color representativo del grupo |
+
+**Verificación.** 132 tests. El codificador se prueba leyendo lo que escribe con un decodificador
+independiente hecho para el test (incluido un cuadro de ruido que llena la tabla LZW). En el Realme,
+con el castillo y 5d6: el GIF pesó **566 KB** (34 cuadros de 400 × 430, 5,4 s), se abrió sin errores
+con otra biblioteca (Pillow) y el mensaje quedó "enviado" **3,5 segundos** después de terminar la
+tirada, contando la bajada de la cámara, el dibujo, la compresión y la subida. La foto pesa unos
+60 KB: la animación, casi diez veces más. **No se probó** el modo "Críticos", la tirada salteada, la
+bandeja sin torre, otros teléfonos, ni cómo se ve dentro de Discord.
+
+**Lo que aprendimos.** Para animar algo fuera de la pantalla conviene guardar los datos (dónde
+estaba cada dado) y no las imágenes: pesan nada, no frenan nada y se pueden volver a dibujar a
+cualquier tamaño.
+
+---
+
 ## Patrones que se repitieron
 
 1. **Imitar lo que haría una persona.** Verter de a poco, golpear la torre, empujar un dado montado,
@@ -926,7 +1091,10 @@ Auditoría en un teléfono de 320 dp ──► hallazgos medidos (contraste del 
 | Otras aberturas para el cuero (ojos de buey con aro de latón, calado, escudo) | Capítulo 11 (opciones no elegidas). |
 | Que en la bandeja los dados también entren desde fuera de la pantalla | Capítulo 14. |
 | Sugerir skins que contrasten con cada escenario | Capítulo 16. |
-| Probar Discord con un webhook real y sin conexión en el teléfono | Capítulo 19 (lo que no se pudo verificar). |
+| Probar Discord sin conexión en el teléfono (cola, reintentos y caducidad sólo están cubiertos por tests) | Capítulo 19; el envío real se verificó en el capítulo 21. |
+| "Conectar con Discord" sin copiar un webhook: el permiso `webhook.incoming` de OAuth2 deja elegir servidor y canal en la propia pantalla de Discord, y el webhook nace con el nombre y la imagen de la aplicación. Hace falta registrar una aplicación en Discord, y resolver dónde guardar su clave: la documentación pide la clave secreta para canjear el código | Capítulo 22. |
+| Probar la tirada animada en "Críticos", con una tirada salteada, en la bandeja y en un teléfono de gama baja; decidir si "Críticos" debería venir por defecto | Capítulo 23 (lo que no se pudo verificar). |
+| Compartir la tarjeta de la tirada con cualquier app (WhatsApp, Telegram): la última ya queda guardada en la caché | Capítulo 22. |
 | Que la barra de estado no reaparezca al abrir una hoja en modo inmersivo | Capítulos 19 y 20 (auditoría). |
 | Que el desglose del marcador siga el orden de las fichas del carrusel | Capítulo 20. |
 | Probar la pantalla nueva en un teléfono ancho y con TalkBack | Capítulo 20 (lo que no se pudo verificar). |

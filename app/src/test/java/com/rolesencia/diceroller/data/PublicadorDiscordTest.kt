@@ -35,12 +35,18 @@ class PublicadorDiscordTest {
 
     private class AlmacenEnMemoria(inicial: List<PendienteDiscord> = emptyList()) : AlmacenCola {
         @Volatile var cola: List<PendienteDiscord> = inicial
+        val fotos = java.util.concurrent.ConcurrentHashMap<Long, ByteArray>()
         override suspend fun leerCola() = cola
         override suspend fun guardarCola(cola: List<PendienteDiscord>) { this.cola = cola }
+        override suspend fun leerImagen(instante: Long) = fotos[instante]
+        override suspend fun borrarImagen(instante: Long) { fotos.remove(instante) }
     }
 
     /** Lo que se "envió", en orden: el texto de cada cuerpo. */
     private val enviados: MutableList<String> = Collections.synchronizedList(mutableListOf())
+
+    /** Cada intento de envío: el cuerpo y cuántos bytes de foto llevaba (null = sin foto). */
+    private val intentosHechos: MutableList<Pair<String, Int?>> = Collections.synchronizedList(mutableListOf())
 
     private fun publicador(
         almacen: AlmacenCola = AlmacenEnMemoria(),
@@ -50,8 +56,9 @@ class PublicadorDiscordTest {
         var intentos = 0
         return PublicadorDiscord(
             almacen = almacen,
-            enviar = { _, cuerpo ->
+            enviar = { _, cuerpo, imagen ->
                 intentos++
+                intentosHechos += cuerpo to imagen?.size
                 respuesta(intentos, cuerpo).also { if (it == ResultadoEnvio.Enviado) enviados += cuerpo }
             },
             alcance = alcance,
@@ -171,6 +178,54 @@ class PublicadorDiscordTest {
         p.configurar(activa)
         assertEquals(listOf(DesenlaceDiscord(5, true)), desenlaces(p, 1))
         assertEquals(listOf("{\"content\":\"quedó pendiente\"}"), enviados.toList())
+    }
+
+    // --- La foto de la tirada ---
+
+    private val adjunto = "\"image\":{\"url\":\"attachment://tirada.jpg\"}"
+
+    @Test fun la_foto_viaja_con_la_tirada_y_despues_se_borra() {
+        val almacen = AlmacenEnMemoria().apply { fotos[1] = ByteArray(500) }
+        val p = publicador(almacen)
+        p.configurar(activa)
+        p.publicar(tirada(1), conImagen = true)
+        assertEquals(listOf(DesenlaceDiscord(1, true)), desenlaces(p, 1))
+        val (cuerpo, bytes) = intentosHechos.single()
+        assertEquals(500, bytes)
+        assertTrue(cuerpo.contains(adjunto))
+        assertTrue("la foto no queda ocupando lugar", almacen.fotos.isEmpty())
+    }
+
+    @Test fun si_la_foto_se_perdio_la_tirada_sale_sin_ella() {
+        // Se pidió con foto, pero el sistema limpió la caché antes de que saliera.
+        val p = publicador(AlmacenEnMemoria())
+        p.configurar(activa)
+        p.publicar(tirada(1), conImagen = true)
+        assertEquals(listOf(DesenlaceDiscord(1, true)), desenlaces(p, 1))
+        val (cuerpo, bytes) = intentosHechos.single()
+        assertEquals(null, bytes)
+        assertTrue("sin adjunto no se lo nombra", !cuerpo.contains("attachment://"))
+    }
+
+    @Test fun si_discord_rechaza_la_foto_la_tirada_se_reintenta_sin_ella() {
+        val almacen = AlmacenEnMemoria().apply { fotos[1] = ByteArray(500) }
+        val p = publicador(almacen) { intento, _ -> if (intento == 1) ResultadoEnvio.Rechazado(413) else ResultadoEnvio.Enviado }
+        p.configurar(activa)
+        p.publicar(tirada(1), conImagen = true)
+        assertEquals(listOf(DesenlaceDiscord(1, true)), desenlaces(p, 1))
+        assertEquals(listOf<Int?>(500, null), intentosHechos.map { it.second })
+        assertTrue(!intentosHechos[1].first.contains("attachment://"))
+    }
+
+    @Test fun una_tirada_descartada_no_deja_su_foto() {
+        val almacen = AlmacenEnMemoria().apply { fotos[1] = ByteArray(500) }
+        val p = publicador(almacen) { _, _ -> ResultadoEnvio.Reintentar(60_000) }
+        p.configurar(activa)
+        p.publicar(tirada(1), conImagen = true)
+        esperarFase(p, FaseDiscord.REINTENTANDO)
+        p.configurar(activa.copy(habilitado = false))
+        assertEquals(listOf(DesenlaceDiscord(1, false)), desenlaces(p, 1))
+        assertTrue(almacen.fotos.isEmpty())
     }
 
     @Test fun con_discord_apagado_no_sale_nada() {

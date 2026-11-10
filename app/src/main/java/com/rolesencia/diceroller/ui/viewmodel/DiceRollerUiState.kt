@@ -97,6 +97,13 @@ data class DiceRollerUiState(
     // Discord: publicar cada tirada en el canal de la mesa
     val discord: ConfigDiscord = ConfigDiscord(),
     val estadoDiscord: EstadoDiscord = EstadoDiscord(),
+    /**
+     * Tirada (por su instante) que espera la foto de la mesa para publicarse con ella. La mesa 3D la
+     * entrega cuando la cámara termina de bajar a la toma cenital.
+     */
+    val fotoPedida: Long? = null,
+    /** La imagen pedida es la tirada animada (GIF) y no sólo la foto del resultado. */
+    val fotoAnimada: Boolean = false,
     /** Por qué la última tirada no se publicó aunque Discord esté encendido. */
     val noPublicada: MotivoNoPublicada? = null,
     /** Resultado del botón "Enviar prueba" de Ajustes. */
@@ -146,6 +153,8 @@ val DiceRollerUiState.avisoDiscord: AvisoDiscord?
         return when {
             noPublicada == MotivoNoPublicada.OCULTA -> AvisoDiscord.OCULTA
             noPublicada == MotivoNoPublicada.VALORES_ELEGIDOS -> AvisoDiscord.VALORES_ELEGIDOS
+            // Mientras se saca la foto todavía no entró en la cola, pero ya está en camino.
+            ultima.instante == fotoPedida -> AvisoDiscord.ENVIANDO
             ultima.instante in estadoDiscord.pendientes ->
                 if (estadoDiscord.fase == FaseDiscord.REINTENTANDO) AvisoDiscord.EN_COLA else AvisoDiscord.ENVIANDO
             ultima.discord == EnvioDiscord.ENVIADA -> AvisoDiscord.ENVIADA

@@ -13,6 +13,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -31,6 +34,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.rolesencia.diceroller.domain.discord.AnimacionDiscord
 import com.rolesencia.diceroller.domain.discord.ConfigDiscord
 import com.rolesencia.diceroller.domain.discord.WebhookDiscord
 import com.rolesencia.diceroller.ui.theme.Ivory
@@ -149,6 +153,34 @@ fun ApartadoDiscord(
             keyboardActions = KeyboardActions(onDone = { foco.clearFocus() }),
             modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) alEnfocarCampo() }
         )
+
+        Interruptor(
+            titulo = "Adjuntar la foto de la tirada",
+            detalle = "Los dados tal como cayeron en tu mesa, con el resultado encima",
+            valor = config.conFoto,
+            onCambio = { onCambio(config.copy(conFoto = !config.conFoto)) }
+        )
+        if (config.conFoto) {
+            // La tirada animada: los dados terminando de caer y la cámara bajando al resultado.
+            Text("Tirada animada (GIF)", fontWeight = FontWeight.SemiBold)
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                AnimacionDiscord.entries.forEachIndexed { i, opcion ->
+                    SegmentedButton(
+                        selected = config.animacion == opcion,
+                        onClick = { onCambio(config.copy(animacion = opcion)) },
+                        shape = SegmentedButtonDefaults.itemShape(i, AnimacionDiscord.entries.size),
+                        icon = {},
+                        label = { Text(opcion.titulo, maxLines = 1, fontSize = 14.sp) }
+                    )
+                }
+            }
+            Text(
+                "En vez de la foto, se ve rodar la tirada dentro de Discord. Pesa bastante más que la foto y " +
+                    "tarda unos segundos en salir. «Críticos»: sólo en los críticos y las pifias.",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
 
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             FilledTonalButton(

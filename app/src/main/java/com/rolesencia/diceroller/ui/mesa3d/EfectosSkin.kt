@@ -12,7 +12,7 @@ import kotlin.random.Random
 
 /** Fuente del sistema para cada tipografía de skin. */
 object Fuentes {
-    private val cache = HashMap<Tipografia, Typeface>()
+    private val cache = java.util.concurrent.ConcurrentHashMap<Tipografia, Typeface>()
 
     fun de(t: Tipografia): Typeface = cache.getOrPut(t) {
         when (t) {
@@ -43,8 +43,8 @@ object ImagenesSkins {
  * giran con él. Se generan una vez por skin, tipo de dado y cara, con una semilla fija.
  */
 object PatronesCara {
-    private val vetas = HashMap<String, List<List<Pair<Float, Float>>>>()
-    private val destellos = HashMap<String, List<Triple<Float, Float, Float>>>()
+    private val vetas = java.util.concurrent.ConcurrentHashMap<String, List<List<Pair<Float, Float>>>>()
+    private val destellos = java.util.concurrent.ConcurrentHashMap<String, List<Triple<Float, Float, Float>>>()
 
     /** Vetas de mármol: 3 líneas que serpentean de un borde al otro. */
     fun vetas(clave: String): List<List<Pair<Float, Float>>> = vetas.getOrPut(clave) {

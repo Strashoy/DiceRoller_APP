@@ -35,7 +35,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -108,6 +110,9 @@ import com.rolesencia.diceroller.ui.components.resumenParametros
 import com.rolesencia.diceroller.ui.mesa3d.MesaDados3D
 import com.rolesencia.diceroller.ui.skins.CreadorSkin
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.toArgb
+import com.rolesencia.diceroller.ui.mesa3d.PedidoFoto
+import com.rolesencia.diceroller.ui.mesa3d.TarjetaTirada
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.HorizontalDivider
@@ -209,6 +214,11 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
     // en un teléfono con recorte la mesa quedaba encuadrada 36 dp más arriba de lo que se ve libre.
     var altoSuperior by remember { mutableIntStateOf(0) }
     var altoInferior by remember { mutableIntStateOf(0) }
+    // Márgenes de las barras: barras del sistema y recorte de la cámara, pero NO el teclado. Esta
+    // pantalla no tiene campos de texto; el teclado sólo aparece dentro de una hoja. Con
+    // `safeDrawing` (que lo incluye) la barra inferior crecía con el teclado, a la mesa no le quedaba
+    // alto y la app se cerraba al tocar el campo del webhook.
+    val margenesBarras = WindowInsets.systemBars.union(WindowInsets.displayCutout)
     val areaUtil = with(densidad) { PaddingValues(top = altoSuperior.toDp(), bottom = altoInferior.toDp()) }
 
     // Mientras ruedan los dados la interfaz se aparta: lo único que importa es la tirada.
@@ -244,7 +254,13 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
             },
             modifier = Modifier.fillMaxSize(),
             modelo = torre,
-            areaUtil = areaUtil
+            areaUtil = areaUtil,
+            // Discord: la foto de los dados tal como cayeron (o la tirada animada). La mesa la arma
+            // en un hilo de fondo cuando la cámara termina de bajar, y la entrega lista para enviar.
+            pedidoFoto = state.fotoPedida?.let { clave ->
+                state.veredicto?.let { PedidoFoto(clave, datosTarjeta(it, state), state.fotoAnimada) }
+            },
+            onAdjunto = viewModel::fotoLista
         )
 
         // --- Arriba: barra + marcador, sobre un degradé que asegura la lectura encima de la mesa ---
@@ -254,7 +270,7 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
                 .fillMaxWidth()
                 .onSizeChanged { altoSuperior = it.height }
                 .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.65f), Color.Transparent)))
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                .windowInsetsPadding(margenesBarras.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
         ) {
             BarraSuperior(
                 state = state,
@@ -284,7 +300,7 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
                 .fillMaxWidth()
                 .onSizeChanged { altoInferior = it.height }
                 .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))))
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+                .windowInsetsPadding(margenesBarras.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
                 .padding(bottom = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -344,7 +360,9 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
                         icono = R.drawable.ic_parametros,
                         destacado = if (state.sistema.usaModificador) conSignoTirada(state.parametros.modificador) else null,
                         texto = if (campo != null && state.parametros.objetivo != null) "${campo.etiquetaCorta} ${state.parametros.objetivo}" else "Tirada",
-                        descripcion = "Tirada: " + resumenParametros(state.parametros, state.sistema.usaModificador, campo),
+                        // (Sin modificador ni objetivo el resumen ya es "Tirada": no se lee "Tirada: Tirada".)
+                        descripcion = resumenParametros(state.parametros, state.sistema.usaModificador, campo)
+                            .let { if (it == "Tirada") it else "Tirada: $it" },
                         habilitado = !ocupado,
                         modifier = Modifier.weight(1f).alpha(opacidadControles),
                         onClick = { hoja = Hoja.PARAMETROS }
@@ -827,6 +845,18 @@ private fun Marcador(state: DiceRollerUiState, hayTorre: Boolean) {
             }
         }
     }
+}
+
+/** Lo que se escribe sobre la foto de la tirada: lo mismo que muestra el marcador. */
+private fun datosTarjeta(veredicto: Veredicto, state: DiceRollerUiState): TarjetaTirada.Datos {
+    val c = contenidoDe(veredicto)
+    val notacion = Notacion.de(state.pool, if (state.sistema.usaModificador) state.parametros.modificador else 0)
+    return TarjetaTirada.Datos(
+        numero = c.numero,
+        etiqueta = c.titulo,
+        color = (if (c.titulo != null) c.colorTitulo else c.colorNumero).toArgb(),
+        pie = "$notacion · ${state.sistema.nombreCorto}"
+    )
 }
 
 /** Alto fijo del marcador: que cambie de contenido no mueve el encuadre de la mesa. */

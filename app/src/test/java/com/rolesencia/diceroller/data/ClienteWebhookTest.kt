@@ -53,11 +53,33 @@ class ClienteWebhookTest {
         "HTTP/1.1 $estado\r\nContent-Type: application/json\r\nContent-Length: ${cuerpo.toByteArray().size}\r\n" +
             extra + "Connection: close\r\n\r\n" + cuerpo
 
-    private fun enviar(respuesta: String, cuerpo: String = "{}"): Pair<ResultadoEnvio, String> =
+    private fun enviar(respuesta: String, cuerpo: String = "{}", imagen: ByteArray? = null): Pair<ResultadoEnvio, String> =
         ServidorFalso(respuesta).use { servidor ->
-            val resultado = ClienteWebhook(2_000, 2_000).enviarBloqueante(servidor.url, cuerpo)
+            val resultado = ClienteWebhook(2_000, 2_000).enviarBloqueante(servidor.url, cuerpo, imagen)
             resultado to servidor.pedido
         }
+
+    @Test fun con_foto_manda_un_formulario_con_el_json_y_el_archivo() {
+        val json = "{\"content\":\"tirada con foto\"}"
+        val foto = "FOTO-JPEG-DE-MENTIRA".toByteArray()
+        val (resultado, pedido) = enviar(respuesta("200 OK", "{}"), json, foto)
+        assertEquals(ResultadoEnvio.Enviado, resultado)
+        val limite = Regex("(?i)content-type: multipart/form-data; boundary=(\\S+)").find(pedido)?.groupValues?.get(1)
+        assertTrue("falta el límite del formulario en:\n$pedido", limite != null)
+        val partes = pedido.substringAfter("\r\n\r\n").split("--$limite")
+        assertEquals("dos partes y el cierre", 4, partes.size)
+        assertTrue(partes[1].contains("name=\"payload_json\"") && partes[1].contains(json))
+        assertTrue(partes[2].contains("name=\"files[0]\"; filename=\"tirada.jpg\""))
+        assertTrue(partes[2].contains("Content-Type: image/jpeg") && partes[2].contains("FOTO-JPEG-DE-MENTIRA"))
+        assertEquals("--\r\n", partes[3])
+    }
+
+    @Test fun la_tirada_animada_se_manda_como_gif() {
+        val gif = "GIF89a-animación-de-mentira".toByteArray()
+        val (resultado, pedido) = enviar(respuesta("200 OK", "{}"), "{}", gif)
+        assertEquals(ResultadoEnvio.Enviado, resultado)
+        assertTrue(pedido.contains("filename=\"tirada.gif\"") && pedido.contains("Content-Type: image/gif"))
+    }
 
     @Test fun manda_un_post_con_el_json_en_utf8() {
         val json = "{\"content\":\"🎲 **Éxito · 19** — 1d20 + 5\"}"

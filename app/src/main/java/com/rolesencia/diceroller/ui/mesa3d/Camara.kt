@@ -77,7 +77,13 @@ class Camara(val ojo: Vec3, objetivo: Vec3) {
         val maxX = crudos.maxOf { it.x }
         val minY = crudos.minOf { it.y }
         val maxY = crudos.maxOf { it.y }
-        val e = minOf((ancho - 2 * margen) / (maxX - minX), (alto - 2 * margen) / (maxY - minY))
+        // La escala tiene que ser siempre positiva. Si el área útil queda en nada (pasó al abrirse el
+        // teclado: las barras tapaban toda la pantalla) una escala cero o negativa llega a los
+        // degradés radiales, que no aceptan radio 0, y la app se cierra. Con el piso de 1 px la
+        // escena se dibuja diminuta por un instante, que es lo correcto: no hay dónde mostrarla.
+        val anchoLibre = (ancho - 2 * margen).coerceAtLeast(1f)
+        val altoLibre = (alto - 2 * margen).coerceAtLeast(1f)
+        val e = minOf(anchoLibre / (maxX - minX).coerceAtLeast(1e-4f), altoLibre / (maxY - minY).coerceAtLeast(1e-4f))
         return Encuadre(e, x0 + ancho / 2f - e * (minX + maxX) / 2f, y0 + alto / 2f - e * (minY + maxY) / 2f)
     }
 }

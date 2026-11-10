@@ -12,7 +12,11 @@ data class ConfigDiscord(
     /** URL del webhook del canal. Es un secreto: quien la tenga puede escribir en ese canal. */
     val webhook: String = "",
     /** Cómo figura quien tira (personaje o jugador). Vacío: el nombre que tenga el webhook. */
-    val jugador: String = ""
+    val jugador: String = "",
+    /** Adjuntar la foto de los dados tal como cayeron. Se puede apagar para gastar menos datos. */
+    val conFoto: Boolean = true,
+    /** Cuándo la foto se reemplaza por la animación de la tirada (pesa unas diez veces más). */
+    val animacion: AnimacionDiscord = AnimacionDiscord.NUNCA
 ) {
     /** Sólo se publica con el interruptor encendido y un webhook con forma válida. */
     val activo: Boolean get() = habilitado && WebhookDiscord.esValido(webhook)
@@ -40,6 +44,14 @@ object WebhookDiscord {
         val n = nombre.trim().lowercase()
         return n.length <= MAX_NOMBRE && "discord" !in n && "clyde" !in n
     }
+}
+
+/** Cuándo se manda la tirada animada (un GIF) en vez de la foto. */
+enum class AnimacionDiscord(val titulo: String) {
+    NUNCA("Nunca"),
+    /** Sólo en los críticos y las pifias: los momentos que la mesa quiere ver. */
+    CRITICOS("Críticos"),
+    SIEMPRE("Siempre")
 }
 
 /** Cómo terminó la publicación de una tirada; queda guardado en su entrada del historial. */

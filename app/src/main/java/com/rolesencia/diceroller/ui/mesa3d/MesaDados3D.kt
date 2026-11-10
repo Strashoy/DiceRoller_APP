@@ -21,7 +21,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import android.graphics.Rect
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.graphics.asAndroidBitmap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.unit.IntRect
+import kotlinx.coroutines.flow.first
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
@@ -90,7 +101,15 @@ fun MesaDados3D(
      */
     onAlturaEntrada: (String, Float) -> Unit = { _, _ -> },
     /** Mantener apretado un dado de la mesa (sin tirada en curso): se lo quiere quitar. */
-    onMantenerDado: (Int) -> Unit = {}
+    onMantenerDado: (Int) -> Unit = {},
+    /**
+     * Pedido de "foto" del resultado: cuando no es null, la mesa entrega por [onFoto] una imagen de
+     * los dados tal como quedaron, apenas la cámara termina de bajar a la toma cenital. El valor
+     * identifica la tirada (cambia en cada pedido).
+     */
+    pedidoFoto: PedidoFoto? = null,
+    /** La tarjeta ya armada: JPEG, o GIF si [animado]. null si no se pudo. */
+    onAdjunto: (clave: Long, adjunto: ByteArray?, animado: Boolean) -> Unit = { _, _, _ -> }
 ) {
     var dibujo by remember { mutableStateOf(dadosQuietos) }
     val escena = remember(modelo) { modelo?.let { EscenaTorre(it) } }
@@ -148,6 +167,46 @@ fun MesaDados3D(
         else vistaResultado.animateTo(0f, tween(500, easing = FastOutSlowInEasing))
     }
 
+    // Foto del resultado. El lienzo se graba en una capa sólo mientras hay una foto pedida; cuando
+    // la cámara llega a la toma cenital se esperan dos cuadros (para que la capa tenga el encuadre
+    // final) y se copia a una imagen. Si el jugador vuelve a la vista general o tira de nuevo antes,
+    // no hay foto: quien la pidió sigue sin ella.
+    val capaFoto = rememberGraphicsLayer()
+    val fotoEnCurso by rememberUpdatedState(pedidoFoto)
+    val entregarAdjunto by rememberUpdatedState(onAdjunto)
+    // Para la animación: las posiciones de los dados en los últimos segundos de la tirada. Guardar
+    // una lista por cuadro no cuesta nada; el dibujo se rehace después, fuera de la pantalla.
+    val grabacion = remember { ArrayDeque<Pair<Long, List<DadoVisual>>>() }
+    LaunchedEffect(pedidoFoto?.clave, cenital) {
+        val pedido = pedidoFoto ?: return@LaunchedEffect
+        if (!cenital) return@LaunchedEffect
+        snapshotFlow { vistaResultado.value }.first { it >= 0.999f }
+        withFrameNanos { }
+        withFrameNanos { }
+        val area = IntRect(izq.toInt(), arr.toInt(), (tamano.width - der).toInt(), (tamano.height - aba).toInt())
+        if (area.width < 64 || area.height < 64) return@LaunchedEffect
+        val foto = runCatching { capaFoto.toImageBitmap() }.getOrNull()
+        val grabados = grabacion.toList()
+        val finales = dibujo
+        var animado = false
+        val adjunto = withContext(Dispatchers.Default) {
+            val gif = if (!pedido.animada) null else runCatching {
+                AnimacionTirada.componer(
+                    contexto, mesa, material, modelo, grabados, finales, destacados, acento,
+                    area.height.toFloat() / area.width, pedido.datos
+                )
+            }.getOrNull()
+            animado = gif != null
+            // Sin animación (o si falló), la foto.
+            gif ?: foto?.let {
+                runCatching {
+                    TarjetaTirada.componer(it.asAndroidBitmap(), Rect(area.left, area.top, area.right, area.bottom), pedido.datos)
+                }.getOrNull()
+            }
+        }
+        entregarAdjunto(pedido.clave, adjunto, animado)
+    }
+
     // Tocar la mesa mientras ruedan los dados adelanta la tirada hasta el final (como piden los
     // usuarios de otras apps de dados: la física es linda, pero no siempre hay ganas de esperarla).
     // Un solo estado para toda la vida de la mesa (el gesto lo captura una vez); se reinicia en cada tirada.
@@ -157,6 +216,7 @@ fun MesaDados3D(
     LaunchedEffect(sesion) {
         saltar = false
         val actual = sesion ?: return@LaunchedEffect
+        grabacion.clear()
         var anterior = withFrameNanos { it }
         while (isActive && !actual.terminada) {
             withFrameNanos { ahora ->
@@ -167,10 +227,13 @@ fun MesaDados3D(
                     repeat(4) { if (!actual.terminada) frame = actual.avanzar(0.1f) }
                     dibujo = frame.dados
                     cuadro(FrameMesa(frame.dados, emptyList()), ahora)
+                    grabacion.clear()   // tirada salteada: no hay caída que mostrar
                 } else {
                     val frame = actual.avanzar((ahora - anterior) / 1e9f)
                     dibujo = frame.dados
                     cuadro(frame, ahora)
+                    grabacion.addLast(ahora to frame.dados)
+                    while (grabacion.size > 2 && ahora - grabacion.first().first > 2_500_000_000L) grabacion.removeFirst()
                 }
                 anterior = ahora
             }
@@ -204,6 +267,12 @@ fun MesaDados3D(
             Modifier
                 .fillMaxSize()
                 .onSizeChanged { tamano = it }
+                .drawWithContent {
+                    if (fotoEnCurso != null) {
+                        capaFoto.record { this@drawWithContent.drawContent() }
+                        drawLayer(capaFoto)
+                    } else drawContent()
+                }
                 .pointerInput(Unit) {
                     // Se capturan los toques en la pasada inicial: la mesa se queda con el gesto
                     // y la página no se desplaza mientras se "agita" la mano sobre ella.
@@ -265,49 +334,67 @@ fun MesaDados3D(
                     }
                 }
         ) {
-            val mx = mesa.ancho / 2f
-            val mz = mesa.profundidad / 2f
-            val t = vistaResultado.value
-            val anchoUtil = (size.width - izq - der).coerceAtLeast(1f)
-            val altoUtil = (size.height - arr - aba).coerceAtLeast(1f)
-            val piso = listOf(Vec3(-mx, 0f, -mz), Vec3(mx, 0f, -mz), Vec3(mx, 0f, mz), Vec3(-mx, 0f, mz))
-            val general = if (escena != null) escena.vertices + piso else listOf(
-                Vec3(-mx, ALTO_PARED, -mz), Vec3(mx, ALTO_PARED, -mz), Vec3(-mx, 0f, mz), Vec3(mx, 0f, mz),
-                Vec3(-mx, ALTO_PARED, mz), Vec3(mx, ALTO_PARED, mz)
+            camaraDibujada[0] = dibujarMesa(
+                mesa, material, escena, dibujo, destacados, pintor, acento, vistaResultado.value, izq, arr, der, aba
             )
-            val ojoGeneral = if (escena != null) Vec3(0f, 30f, mz + 26f) else Vec3(0f, 40f, mesa.profundidad * 0.6f)
-            val miraGeneral = if (escena != null) Vec3(0f, 8f, -mz * 0.3f) else Vec3(0f, 0f, 1f)
-            val camara: Camara
-            if (t > 0f && dibujo.isNotEmpty()) {
-                val resultado = encuadreResultado(dibujo, altoUtil / anchoUtil, mx, mz)
-                val centro = Vec3(
-                    resultado.sumOf { it.x.toDouble() }.toFloat() / resultado.size, 0f,
-                    resultado.sumOf { it.z.toDouble() }.toFloat() / resultado.size
-                )
-                // Casi cenital: una pizca de inclinación conserva "arriba" de la pantalla = fondo de la mesa.
-                val ojoCenital = centro + Vec3(0f, ALTO_CENITAL, 0.4f)
-                camara = Camara(mezcla(ojoGeneral, ojoCenital, t), mezcla(miraGeneral, centro, t))
-                camara.ajustarEntre(general, 6f, resultado, 0f, anchoUtil, altoUtil, t, izq, arr)
-            } else {
-                camara = if (escena != null) camaraGeneral(escena, mesa, size.width, size.height, izq, arr, der, aba)
-                else Camara(ojoGeneral, miraGeneral).also { it.ajustar(general, anchoUtil, altoUtil, margen = 6f, x0 = izq, y0 = arr) }
-            }
-            camaraDibujada[0] = camara
-            if (escena != null) {
-                dibujarConTorre(escena, camara, dibujo, destacados, pintor, vineta = 1f - t, acento = acento)
-                return@Canvas
-            }
-            dibujarFondoBandeja(arr + altoUtil / 2f)
-            dibujarBandeja(camara, mx, mz, material)
-            val ordenados = dibujo.sortedByDescending { camara.profundidad(it.posicion) }
-            ordenados.forEach { pintor.dibujarSombra(this, camara, it) }
-            ordenados.forEach { pintor.dibujarDado(this, camara, it, it.dado.id in destacados, acento) }
         }
         // El aviso de "pre-simulando" lo muestra la pantalla, en la zona de estado de la interfaz.
     }
 }
 
 private fun mezcla(a: Vec3, b: Vec3, t: Float) = a + (b - a) * t
+
+/**
+ * Dibuja la mesa entera (escenario, sombras y dados) y devuelve la cámara que usó.
+ *
+ * Es una función aparte del `Canvas` de la pantalla para poder dibujar la misma escena **fuera de la
+ * pantalla**: así se arma la animación de la tirada (ver [AnimacionTirada]).
+ *
+ * @param t cuánto bajó la cámara hacia el resultado: 0 = vista general, 1 = toma cenital.
+ * @param izq, arr, der, aba franjas del lienzo que tapa la interfaz (0 fuera de la pantalla).
+ */
+internal fun DrawScope.dibujarMesa(
+    mesa: ConfigMesa, material: MaterialMesa, escena: EscenaTorre?, dibujo: List<DadoVisual>,
+    destacados: Set<Int>, pintor: PintorDados, acento: Color, t: Float,
+    izq: Float, arr: Float, der: Float, aba: Float
+): Camara {
+    val mx = mesa.ancho / 2f
+    val mz = mesa.profundidad / 2f
+    val anchoUtil = (size.width - izq - der).coerceAtLeast(1f)
+    val altoUtil = (size.height - arr - aba).coerceAtLeast(1f)
+    val piso = listOf(Vec3(-mx, 0f, -mz), Vec3(mx, 0f, -mz), Vec3(mx, 0f, mz), Vec3(-mx, 0f, mz))
+    val general = if (escena != null) escena.vertices + piso else listOf(
+        Vec3(-mx, ALTO_PARED, -mz), Vec3(mx, ALTO_PARED, -mz), Vec3(-mx, 0f, mz), Vec3(mx, 0f, mz),
+        Vec3(-mx, ALTO_PARED, mz), Vec3(mx, ALTO_PARED, mz)
+    )
+    val ojoGeneral = if (escena != null) Vec3(0f, 30f, mz + 26f) else Vec3(0f, 40f, mesa.profundidad * 0.6f)
+    val miraGeneral = if (escena != null) Vec3(0f, 8f, -mz * 0.3f) else Vec3(0f, 0f, 1f)
+    val camara: Camara
+    if (t > 0f && dibujo.isNotEmpty()) {
+        val resultado = encuadreResultado(dibujo, altoUtil / anchoUtil, mx, mz)
+        val centro = Vec3(
+            resultado.sumOf { it.x.toDouble() }.toFloat() / resultado.size, 0f,
+            resultado.sumOf { it.z.toDouble() }.toFloat() / resultado.size
+        )
+        // Casi cenital: una pizca de inclinación conserva "arriba" de la pantalla = fondo de la mesa.
+        val ojoCenital = centro + Vec3(0f, ALTO_CENITAL, 0.4f)
+        camara = Camara(mezcla(ojoGeneral, ojoCenital, t), mezcla(miraGeneral, centro, t))
+        camara.ajustarEntre(general, 6f, resultado, 0f, anchoUtil, altoUtil, t, izq, arr)
+    } else {
+        camara = if (escena != null) camaraGeneral(escena, mesa, size.width, size.height, izq, arr, der, aba)
+        else Camara(ojoGeneral, miraGeneral).also { it.ajustar(general, anchoUtil, altoUtil, margen = 6f, x0 = izq, y0 = arr) }
+    }
+    if (escena != null) {
+        dibujarConTorre(escena, camara, dibujo, destacados, pintor, vineta = 1f - t, acento = acento)
+        return camara
+    }
+    dibujarFondoBandeja(arr + altoUtil / 2f)
+    dibujarBandeja(camara, mx, mz, material)
+    val ordenados = dibujo.sortedByDescending { camara.profundidad(it.posicion) }
+    ordenados.forEach { pintor.dibujarSombra(this, camara, it) }
+    ordenados.forEach { pintor.dibujarDado(this, camara, it, it.dado.id in destacados, acento) }
+    return camara
+}
 
 /** Cámara de la vista general con torre, encuadrada en el área útil (la misma del dibujo). */
 private fun camaraGeneral(
