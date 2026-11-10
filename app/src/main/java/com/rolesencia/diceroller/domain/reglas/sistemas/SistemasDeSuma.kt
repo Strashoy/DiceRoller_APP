@@ -51,10 +51,11 @@ object SumaLibre : SistemaReglas {
 object D20ContraCd : SistemaReglas {
     override val id = "d20"
     override val nombre = "d20 contra CD (D&D 5e)"
+    override val nombreCorto = "D&D 5e (d20)"
     override val descripcion = "1d20 + modificador ≥ CD es éxito. 20 natural: crítico. 1 natural: pifia. " +
         "Con 2d20 elegí Mayor/Menor para ventaja o desventaja."
     override val usaModificador = true
-    override val campoObjetivo = CampoParametro("CD", 1..30, 15)
+    override val campoObjetivo = CampoParametro("CD", 1..30, 15, opcional = true)
 
     override fun tiradaSugerida() = pool { agregar(TipoDado.D20) }
 
@@ -90,6 +91,7 @@ object D20ContraCd : SistemaReglas {
 object PoweredByTheApocalypse : SistemaReglas {
     override val id = "pbta"
     override val nombre = "Powered by the Apocalypse"
+    override val nombreCorto = "PbtA (2d6)"
     override val descripcion = "2d6 + modificador. 6 o menos: fallo. 7–9: éxito parcial (con coste). 10+: éxito completo."
     override val usaModificador = true
 
@@ -121,7 +123,7 @@ object CypherSystem : SistemaReglas {
     override val descripcion = "1d20 ≥ dificultad × 3. 1 natural: intrusión del DJ. 17–18: +daño. " +
         "19: efecto menor. 20: efecto mayor."
     override val usaModificador = true
-    override val campoObjetivo = CampoParametro("Dificultad", 0..10, 4)
+    override val campoObjetivo = CampoParametro("Dificultad", 0..10, 4, etiquetaCorta = "Dif.")
 
     override fun tiradaSugerida() = pool { agregar(TipoDado.D20) }
 
@@ -157,7 +159,7 @@ object FateCore : SistemaReglas {
     override val descripcion = "4 dados Fate (−, 0, +) + habilidad contra oposición. Empate: éxito con coste " +
         "menor. 3 o más de diferencia: éxito con estilo."
     override val usaModificador = true
-    override val campoObjetivo = CampoParametro("Oposición", -2..8, 2)
+    override val campoObjetivo = CampoParametro("Oposición", -2..8, 2, etiquetaCorta = "Op.")
 
     private val escalera = mapOf(
         8 to "Legendario", 7 to "Épico", 6 to "Fantástico", 5 to "Excelente", 4 to "Grande",
@@ -196,10 +198,11 @@ object FateCore : SistemaReglas {
 object Daggerheart : SistemaReglas {
     override val id = "daggerheart"
     override val nombre = "Daggerheart (Esperanza/Miedo)"
+    override val nombreCorto = "Daggerheart"
     override val descripcion = "2d12: Esperanza (normal) y Miedo (especial) + modificador ≥ dificultad. " +
         "Si sale mayor el de Miedo, el DJ gana Miedo. Dobles: ¡crítico!"
     override val usaModificador = true
-    override val campoObjetivo = CampoParametro("Dificultad", 5..30, 12)
+    override val campoObjetivo = CampoParametro("Dificultad", 5..30, 12, etiquetaCorta = "Dif.")
 
     override fun tiradaSugerida() = pool {
         agregar(TipoDado.D12)

@@ -14,6 +14,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.focus.onFocusChanged
+import kotlinx.coroutines.launch
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -72,12 +76,22 @@ fun HojaHistorial(
     onBorrarGuardada: (TiradaGuardada) -> Unit,
     onCerrar: () -> Unit,
     /** Tiradas que todavía esperan publicarse en Discord (por su instante). */
-    pendientesDiscord: Set<Long> = emptySet()
+    pendientesDiscord: Set<Long> = emptySet(),
+    /** 0 = Historial, 1 = Guardadas (el atajo "Guardar esta tirada" abre directo en la segunda). */
+    pestanaInicial: Int = 0,
+    onRestaurarHistorial: (List<EntradaHistorial>) -> Unit = {},
+    onRestaurarGuardada: (TiradaGuardada) -> Unit = {}
 ) {
-    var pestana by remember { mutableIntStateOf(if (historial.isEmpty() && guardadas.isNotEmpty()) 1 else 0) }
+    var pestana by remember { mutableIntStateOf(if (pestanaInicial == 1 || (historial.isEmpty() && guardadas.isNotEmpty())) 1 else 0) }
+    // Lo último que se borró en esta hoja, para poder deshacerlo sin salir de ella. (Los avisos de la
+    // pantalla quedan tapados por la hoja, así que el "Deshacer" va adentro.)
+    var historialBorrado by remember { mutableStateOf<List<EntradaHistorial>>(emptyList()) }
+    var guardadaBorrada by remember { mutableStateOf<TiradaGuardada?>(null) }
+    val estadoHoja = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+    val alcance = rememberCoroutineScope()
     ModalBottomSheet(
         onDismissRequest = onCerrar,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false),
+        sheetState = estadoHoja,
         containerColor = MaterialTheme.colorScheme.surfaceVariant
     ) {
         PrimaryTabRow(selectedTabIndex = pestana, containerColor = MaterialTheme.colorScheme.surfaceVariant) {
@@ -85,14 +99,50 @@ fun HojaHistorial(
             Tab(pestana == 1, { pestana = 1 }, text = { Text("Guardadas · ${guardadas.size}") })
         }
         when (pestana) {
-            0 -> PestanaHistorial(historial, habilitado, pendientesDiscord, onRepetir = { onRepetir(it); onCerrar() }, onBorrarHistorial)
-            else -> PestanaGuardadas(
-                guardadas, notacionActual, habilitado,
-                onLanzar = { onLanzarGuardada(it); onCerrar() },
-                onGuardar = onGuardarActual,
-                onBorrar = onBorrarGuardada
-            )
+            0 -> {
+                if (historialBorrado.isNotEmpty()) FilaDeshacer("Borraste el historial (${historialBorrado.size})") {
+                    onRestaurarHistorial(historialBorrado)
+                    historialBorrado = emptyList()
+                }
+                PestanaHistorial(
+                    historial, habilitado, pendientesDiscord,
+                    onRepetir = { onRepetir(it); onCerrar() },
+                    onBorrar = { historialBorrado = historial; onBorrarHistorial() }
+                )
+            }
+            else -> {
+                guardadaBorrada?.let { borrada ->
+                    FilaDeshacer("Borraste «${borrada.nombre}»") {
+                        onRestaurarGuardada(borrada)
+                        guardadaBorrada = null
+                    }
+                }
+                PestanaGuardadas(
+                    guardadas, notacionActual, habilitado,
+                    onLanzar = { onLanzarGuardada(it); onCerrar() },
+                    onGuardar = onGuardarActual,
+                    onBorrar = { guardadaBorrada = it; onBorrarGuardada(it) },
+                    // Al escribir el nombre la hoja se abre entera: a media altura el teclado tapa el campo.
+                    alEnfocarCampo = { alcance.launch { estadoHoja.expand() } }
+                )
+            }
         }
+    }
+}
+
+/** "Borraste… · Deshacer": la pauta de Material para lo que se borra de un toque. */
+@Composable
+private fun FilaDeshacer(texto: String, onDeshacer: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(12.dp))
+            .padding(start = 14.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(texto, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        TextButton(onClick = onDeshacer, modifier = Modifier.heightIn(min = 48.dp)) { Text("Deshacer", fontWeight = FontWeight.Bold) }
     }
 }
 
@@ -155,7 +205,8 @@ private fun PestanaGuardadas(
     habilitado: Boolean,
     onLanzar: (TiradaGuardada) -> Unit,
     onGuardar: (String) -> Unit,
-    onBorrar: (TiradaGuardada) -> Unit
+    onBorrar: (TiradaGuardada) -> Unit,
+    alEnfocarCampo: () -> Unit = {}
 ) {
     var nombre by remember { mutableStateOf("") }
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
@@ -166,7 +217,7 @@ private fun PestanaGuardadas(
                 onValueChange = { nombre = it.take(40) },
                 placeholder = { Text("Ej.: Espada larga") },
                 singleLine = true,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f).onFocusChanged { if (it.isFocused) alEnfocarCampo() }
             )
             FilledTonalButton(
                 onClick = { onGuardar(nombre); nombre = "" },
@@ -219,6 +270,9 @@ private fun Vacio(titulo: String, texto: String) {
     }
 }
 
-/** "hace 3 min", "ayer"… en el idioma del teléfono. */
-private fun hace(instante: Long): String =
-    DateUtils.getRelativeTimeSpanString(instante, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
+/** "hace 3 min", "ayer"… en el idioma del teléfono; en el primer minuto, "Recién" (y no "Hace 0 minutos"). */
+private fun hace(instante: Long): String {
+    val ahora = System.currentTimeMillis()
+    if (ahora - instante < DateUtils.MINUTE_IN_MILLIS) return "Recién"
+    return DateUtils.getRelativeTimeSpanString(instante, ahora, DateUtils.MINUTE_IN_MILLIS).toString()
+}

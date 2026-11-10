@@ -20,9 +20,10 @@ import com.rolesencia.diceroller.domain.reglas.pool
 object LlamadaDeCthulhu : SistemaReglas {
     override val id = "coc"
     override val nombre = "La Llamada de Cthulhu (d100)"
+    override val nombreCorto = "Cthulhu (d100)"
     override val descripcion = "d100 ≤ habilidad es éxito. ≤ mitad: difícil. ≤ quinto: extremo. 01: crítico. " +
         "100 (o 96+ con habilidad < 50): pifia. Dados extra de decenas = bonificación/penalización."
-    override val campoObjetivo = CampoParametro("Habilidad", 1..99, 50)
+    override val campoObjetivo = CampoParametro("Habilidad", 1..99, 50, etiquetaCorta = "Hab.")
 
     override fun tiradaSugerida() = pool {
         agregar(TipoDado.D100_DECENAS)

@@ -47,12 +47,34 @@ data class Veredicto(
 data class CampoParametro(
     val etiqueta: String,
     val rango: IntRange,
-    val porDefecto: Int
-)
+    val porDefecto: Int,
+    /** Para los lugares angostos, como el botón "Tirada" ("Dif. 12" en vez de "Dificultad 12"). */
+    val etiquetaCorta: String = etiqueta,
+    /**
+     * Se puede tirar sin fijarlo: el sistema muestra sólo el total. Es el caso de la CD de D&D, que
+     * muchas veces conoce sólo el máster; juzgar contra un número que nadie dijo confunde.
+     */
+    val opcional: Boolean = false
+) {
+    /** Con qué valor arranca la mesa al elegir el sistema: nada, si es opcional. */
+    val inicial: Int? get() = if (opcional) null else porDefecto
+}
+
+/**
+ * El total, sólo si el título del veredicto no lo dice ya: "Éxito" con total 19 → 19; "54" o
+ * "3 éxitos" → null. Lo usan el marcador (número grande aparte del veredicto) y el mensaje de Discord.
+ */
+fun totalFueraDelTitulo(titulo: String, total: Int?): Int? {
+    total ?: return null
+    val buscado = kotlin.math.abs(total).toString()
+    return if (Regex("""\d+""").findAll(titulo).any { it.value == buscado }) null else total
+}
 
 interface SistemaReglas {
     val id: String
     val nombre: String
+    /** Para la barra superior, donde el nombre completo no entra en teléfonos angostos. */
+    val nombreCorto: String get() = nombre
     /** Explicación corta que se muestra en el diálogo de info. */
     val descripcion: String
 

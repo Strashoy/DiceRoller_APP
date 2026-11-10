@@ -108,7 +108,14 @@ import com.rolesencia.diceroller.ui.components.resumenParametros
 import com.rolesencia.diceroller.ui.mesa3d.MesaDados3D
 import com.rolesencia.diceroller.ui.skins.CreadorSkin
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.platform.LocalConfiguration
+import com.rolesencia.diceroller.domain.historial.Atajos
+import com.rolesencia.diceroller.domain.reglas.Veredicto
+import com.rolesencia.diceroller.domain.reglas.totalFueraDelTitulo
+import com.rolesencia.diceroller.ui.components.FilaAtajos
 import com.rolesencia.diceroller.ui.theme.DarkBlueFantasia
 import com.rolesencia.diceroller.ui.theme.Ivory
 import com.rolesencia.diceroller.ui.theme.NaranjaCostoso
@@ -134,6 +141,7 @@ import com.rolesencia.diceroller.ui.viewmodel.DiceRollerViewModel
 fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
     val state by viewModel.uiState.collectAsState()
     var hoja by remember { mutableStateOf(Hoja.NINGUNA) }
+    var pestanaHistorial by remember { mutableIntStateOf(0) }
     var mostrarCreador by remember { mutableStateOf(false) }
     var skinEnEdicion by remember { mutableStateOf<SkinDado?>(null) }
     var abrirSolapa by remember { mutableIntStateOf(0) }
@@ -197,9 +205,10 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
 
     // Alto real de las barras superpuestas: la cámara encuadra la mesa en lo que queda libre.
     val densidad = LocalDensity.current
+    // Se miden por fuera de los márgenes del sistema (recorte de la cámara, barra de gestos): si no,
+    // en un teléfono con recorte la mesa quedaba encuadrada 36 dp más arriba de lo que se ve libre.
     var altoSuperior by remember { mutableIntStateOf(0) }
     var altoInferior by remember { mutableIntStateOf(0) }
-    var bordeSuperior by remember { mutableIntStateOf(0) }
     val areaUtil = with(densidad) { PaddingValues(top = altoSuperior.toDp(), bottom = altoInferior.toDp()) }
 
     // Mientras ruedan los dados la interfaz se aparta: lo único que importa es la tirada.
@@ -243,11 +252,9 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
             Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
-                // Borde inferior real del bloque, contando el recorte de la cámara (altoSuperior no lo cuenta).
-                .onSizeChanged { bordeSuperior = it.height }
+                .onSizeChanged { altoSuperior = it.height }
                 .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.65f), Color.Transparent)))
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
-                .onSizeChanged { altoSuperior = it.height }
         ) {
             BarraSuperior(
                 state = state,
@@ -255,7 +262,6 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
                 opacidad = opacidadControles,
                 onSistema = { hoja = Hoja.SISTEMA },
                 onLanzamiento = viewModel::seleccionarLanzamiento,
-                onHistorial = { hoja = Hoja.HISTORIAL },
                 onAjustes = { hoja = Hoja.AJUSTES }
             )
             Marcador(state, hayTorre = torre != null)
@@ -267,7 +273,7 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
             IndicadorDiscord(
                 aviso = aviso,
                 enCola = state.estadoDiscord.pendientes.size,
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = with(densidad) { bordeSuperior.toDp() })
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = with(densidad) { altoSuperior.toDp() })
             )
         }
 
@@ -276,18 +282,33 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
             Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
+                .onSizeChanged { altoInferior = it.height }
                 .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f))))
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
-                .padding(bottom = 12.dp)
-                .onSizeChanged { altoInferior = it.height },
+                .padding(bottom = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Atajos: historial, tiradas guardadas y las últimas tiradas distintas, a un toque.
+            FilaAtajos(
+                guardadas = state.tiradasGuardadas,
+                recientes = remember(state.historial, state.tiradasGuardadas, state.sistema, state.pool, state.parametros) {
+                    Atajos.recientes(state.historial, state.tiradasGuardadas, state.sistema.id, state.pool, state.parametros)
+                },
+                habilitado = !ocupado,
+                onHistorial = { pestanaHistorial = 0; hoja = Hoja.HISTORIAL },
+                onGuardar = { pestanaHistorial = 1; hoja = Hoja.HISTORIAL },
+                onLanzarGuardada = { FeedbackTactil.clickBoton(vista); viewModel.lanzarGuardada(it) },
+                onRepetir = { FeedbackTactil.clickBoton(vista); viewModel.repetir(it) },
+                modifier = Modifier.alpha(opacidadControles)
+            )
             // Fila de dados: tocar suma uno, mantener quita uno (y se puede deshacer).
             CarruselDados(
                 pool = state.pool,
                 resultados = state.resultados,
                 destacados = state.veredicto?.dadosDestacados.orEmpty(),
                 estaRodando = ocupado,
+                // Cambia también al terminar de cargar las preferencias: la fila se ordena con el pool real.
+                sistemaId = if (state.estaCargando) "" else state.sistema.id,
                 skinActual = state.skinActual,
                 onAgregar = { tipo ->
                     FeedbackTactil.clickBoton(vista)
@@ -315,10 +336,15 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // En 66 dp de ancho no entra "+0 · CD 15 · Mayor": el botón muestra lo que más cambia
+                // (el modificador, grande) y debajo el objetivo en corto. TalkBack lee el resumen entero.
+                val campo = state.sistema.campoObjetivo
                 val botonTirada: @Composable RowScope.() -> Unit = {
                     BotonSecundario(
                         icono = R.drawable.ic_parametros,
-                        texto = resumenParametros(state.parametros, state.sistema.usaModificador, state.sistema.campoObjetivo),
+                        destacado = if (state.sistema.usaModificador) conSignoTirada(state.parametros.modificador) else null,
+                        texto = if (campo != null && state.parametros.objetivo != null) "${campo.etiquetaCorta} ${state.parametros.objetivo}" else "Tirada",
+                        descripcion = "Tirada: " + resumenParametros(state.parametros, state.sistema.usaModificador, campo),
                         habilitado = !ocupado,
                         modifier = Modifier.weight(1f).alpha(opacidadControles),
                         onClick = { hoja = Hoja.PARAMETROS }
@@ -327,7 +353,9 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
                 val botonDados: @Composable RowScope.() -> Unit = {
                     BotonSecundario(
                         icono = R.drawable.ic_dados,
-                        texto = if (state.pool.isEmpty()) "Dados" else "Dados · ${state.pool.size}",
+                        texto = "Dados",
+                        contador = state.pool.size,
+                        descripcion = "Dados y skins: ${state.pool.size} en la mesa",
                         habilitado = !ocupado,
                         modifier = Modifier.weight(1f).alpha(opacidadControles),
                         onClick = { abrirSolapa++ }
@@ -364,7 +392,8 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
             onCrearSkin = { skinEnEdicion = null; mostrarCreador = true },
             onEditarSkin = { skinEnEdicion = it; mostrarCreador = true },
             onBorrarSkin = viewModel::borrarSkin,
-            solicitudApertura = abrirSolapa
+            solicitudApertura = abrirSolapa,
+            aLaIzquierda = state.manoIzquierda
         )
 
         SnackbarHost(
@@ -397,11 +426,14 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
             notacionActual = Notacion.de(state.pool, if (state.sistema.usaModificador) state.parametros.modificador else 0),
             habilitado = !ocupado,
             pendientesDiscord = state.estadoDiscord.pendientes,
+            pestanaInicial = pestanaHistorial,
             onRepetir = viewModel::repetir,
             onBorrarHistorial = viewModel::borrarHistorial,
+            onRestaurarHistorial = viewModel::restaurarHistorial,
             onLanzarGuardada = viewModel::lanzarGuardada,
             onGuardarActual = viewModel::guardarTiradaActual,
             onBorrarGuardada = viewModel::borrarTiradaGuardada,
+            onRestaurarGuardada = viewModel::restaurarTiradaGuardada,
             onCerrar = cerrar
         )
         Hoja.PARAMETROS -> HojaParametros(
@@ -411,6 +443,7 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
             habilitado = !ocupado,
             onModificador = viewModel::cambiarModificador,
             onObjetivo = viewModel::cambiarObjetivo,
+            onQuitarObjetivo = viewModel::quitarObjetivo,
             onConservar = viewModel::cambiarConservar,
             onTiradaSugerida = viewModel::restaurarTiradaSugerida,
             onCerrar = cerrar
@@ -460,32 +493,32 @@ private fun BarraSuperior(
     opacidad: Float,
     onSistema: () -> Unit,
     onLanzamiento: (String?) -> Unit,
-    onHistorial: () -> Unit,
     onAjustes: () -> Unit
 ) {
     var menuLanzamiento by remember { mutableStateOf(false) }
+    // En teléfonos angostos (320 dp) el escenario queda sólo con su ícono: la torre ya se ve en la
+    // mesa, y ese lugar lo necesita el nombre del sistema para leerse entero.
+    val angosta = LocalConfiguration.current.screenWidthDp < 380
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp).alpha(opacidad),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         // Sistema de juego: es lo que define cómo se lee la tirada, por eso va primero y con nombre.
-        // Ocupa el espacio libre y empuja lo demás a la derecha; si el nombre es largo, se recorta.
+        // Ocupa el espacio libre y usa el nombre corto ("D&D 5e (d20)"); TalkBack lee el completo.
         Box(Modifier.weight(1f)) {
             PildoraSuperior(
                 icono = R.drawable.ic_sistema,
-                texto = state.sistema.nombre,
+                texto = state.sistema.nombreCorto,
                 descripcion = "Sistema de juego: " + state.sistema.nombre,
                 habilitado = !ocupado,
                 onClick = onSistema
             )
         }
-        // Escenario: nombre corto (el ícono ya dice "torre") y con tope de ancho, para que nunca
-        // aplaste al sistema de juego, que es lo que más importa leer.
         Box(Modifier.widthIn(max = 170.dp)) {
             PildoraSuperior(
                 icono = R.drawable.ic_torre,
-                texto = nombreCortoEscenario(state.modeloTorre),
+                texto = if (angosta) null else nombreCortoEscenario(state.modeloTorre),
                 descripcion = "Dónde se lanza: " + (state.modeloTorre?.let { ModelosTorre.nombre(it) } ?: "Bandeja"),
                 habilitado = !ocupado,
                 onClick = { menuLanzamiento = true }
@@ -503,9 +536,7 @@ private fun BarraSuperior(
                 }
             }
         }
-        IconButton(onClick = onHistorial) {
-            Icon(painterResource(R.drawable.ic_historial), contentDescription = "Historial y tiradas guardadas", tint = Ivory)
-        }
+        // El historial ya no está acá: vive en la fila de atajos, al alcance del pulgar.
         IconButton(onClick = onAjustes) {
             Icon(painterResource(R.drawable.ic_ajustes), contentDescription = "Ajustes", tint = Ivory)
         }
@@ -527,7 +558,8 @@ private fun nombreCortoEscenario(id: String?): String = when (id) {
 @Composable
 private fun PildoraSuperior(
     @DrawableRes icono: Int,
-    texto: String,
+    /** null = sólo el ícono, en un círculo de 48 dp. */
+    texto: String?,
     descripcion: String,
     habilitado: Boolean,
     onClick: () -> Unit,
@@ -536,17 +568,21 @@ private fun PildoraSuperior(
     FilledTonalButton(
         onClick = onClick,
         enabled = habilitado,
-        contentPadding = PaddingValues(horizontal = 12.dp),
+        contentPadding = PaddingValues(horizontal = if (texto == null) 0.dp else 12.dp),
         colors = ButtonDefaults.filledTonalButtonColors(
             containerColor = Color.Black.copy(alpha = 0.45f),
             contentColor = Ivory
         ),
-        // TalkBack lee el nombre completo aunque en pantalla se vea recortado.
-        modifier = modifier.heightIn(min = 48.dp).semantics { contentDescription = descripcion }
+        // TalkBack lee el nombre completo aunque en pantalla se vea el corto o sólo el ícono.
+        modifier = modifier
+            .then(if (texto == null) Modifier.size(48.dp) else Modifier.heightIn(min = 48.dp))
+            .semantics { contentDescription = descripcion }
     ) {
-        Icon(painterResource(icono), contentDescription = null, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(6.dp))
-        Text(texto, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+        Icon(painterResource(icono), contentDescription = null, modifier = Modifier.size(if (texto == null) 22.dp else 18.dp))
+        if (texto != null) {
+            Spacer(Modifier.width(6.dp))
+            Text(texto, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+        }
     }
 }
 
@@ -657,31 +693,51 @@ private fun IndicadorDiscord(aviso: AvisoDiscord, enCola: Int, modifier: Modifie
     }
 }
 
+/**
+ * Botón de los costados de LANZAR. Arriba va el ícono, o [destacado] si lo hay (el modificador, que es
+ * lo que se mira antes de tirar); el [contador] se muestra como insignia sobre el ícono, con el acento
+ * del ambiente, igual que los contadores del carrusel.
+ */
 @Composable
 private fun BotonSecundario(
     @DrawableRes icono: Int,
     texto: String,
+    descripcion: String,
     habilitado: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    destacado: String? = null,
+    contador: Int = 0
 ) {
     FilledTonalButton(
         onClick = onClick,
         enabled = habilitado,
         shape = RoundedCornerShape(20.dp),
-        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
         colors = ButtonDefaults.filledTonalButtonColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
             contentColor = Ivory
         ),
-        modifier = modifier.height(64.dp)
+        modifier = modifier.height(64.dp).semantics { contentDescription = descripcion }
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(painterResource(icono), contentDescription = null, modifier = Modifier.size(22.dp))
+            if (destacado != null) {
+                Text(destacado, fontSize = 20.sp, lineHeight = 24.sp, fontWeight = FontWeight.Black, maxLines = 1)
+            } else {
+                BadgedBox(
+                    badge = {
+                        if (contador > 0) Badge(containerColor = LocalAcento.current, contentColor = Color.Black) {
+                            Text("$contador", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                ) { Icon(painterResource(icono), contentDescription = null, modifier = Modifier.size(22.dp)) }
+            }
             Text(texto, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
         }
     }
 }
+
+private fun conSignoTirada(n: Int) = if (n >= 0) "+$n" else "−${-n}"
 
 /**
  * Marcador: el veredicto en grande, con el color de su nivel. Tiene altura fija para que aparecer y
@@ -690,49 +746,115 @@ private fun BotonSecundario(
  */
 @Composable
 private fun Marcador(state: DiceRollerUiState, hayTorre: Boolean) {
-    val contenido: Pair<String, String?> = when {
-        state.preparando -> "Pre-simulando la tirada…" to null
-        state.estaRodando -> "Rodando…" to "Tocá la mesa para ver el resultado ya"
-        state.veredicto != null -> state.veredicto.titulo to state.veredicto.detalle.takeIf { it.isNotBlank() }
-        state.pool.isEmpty() -> "Mesa vacía" to "Tocá un dado de abajo para agregarlo"
+    val contenido = when {
+        state.preparando -> ContenidoMarcador(titulo = "Pre-simulando la tirada…")
+        state.estaRodando -> ContenidoMarcador(titulo = "Rodando…", detalle = "Tocá la mesa para ver el resultado ya")
+        state.veredicto != null -> contenidoDe(state.veredicto)
+        state.pool.isEmpty() -> ContenidoMarcador(titulo = "Mesa vacía", detalle = "Tocá un dado de abajo para agregarlo")
         // Las primeras veces, la pista de uso; después, la tirada en notación ("1d20 + 5").
-        state.historial.size < 3 && hayTorre -> "Listo para lanzar" to "Tocá un dado para sumarlo, mantenelo para quitarlo · LANZAR los suelta por la torre"
-        state.historial.size < 3 -> "Listo para lanzar" to "Tocá un dado para sumarlo · deslizá sobre la mesa o tocá LANZAR"
-        else -> Notacion.de(state.pool, if (state.sistema.usaModificador) state.parametros.modificador else 0) to state.sistema.nombre
+        state.historial.size < 3 && hayTorre -> ContenidoMarcador(
+            titulo = "Listo para lanzar",
+            detalle = "Tocá un dado para sumarlo, mantenelo para quitarlo · LANZAR los suelta por la torre"
+        )
+        state.historial.size < 3 -> ContenidoMarcador(
+            titulo = "Listo para lanzar",
+            detalle = "Tocá un dado para sumarlo · deslizá sobre la mesa o tocá LANZAR"
+        )
+        else -> ContenidoMarcador(
+            titulo = Notacion.de(state.pool, if (state.sistema.usaModificador) state.parametros.modificador else 0),
+            detalle = state.sistema.nombre
+        )
     }
-    val color = state.veredicto?.takeIf { !state.estaRodando && !state.preparando }?.let { colorDe(it.nivel) } ?: Ivory
-    val esVeredicto = state.veredicto != null && !state.estaRodando && !state.preparando
     AnimatedContent(
         targetState = contenido,
         transitionSpec = { fadeIn(tween(250)) togetherWith fadeOut(tween(200)) },
         label = "marcador",
+        contentAlignment = Alignment.Center,
         modifier = Modifier
             .fillMaxWidth()
-            .height(84.dp)
-            .padding(horizontal = 20.dp)
+            .height(ALTO_MARCADOR)
+            .padding(horizontal = 16.dp)
             .semantics { liveRegion = LiveRegionMode.Polite }
-    ) { (titulo, detalle) ->
-        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Text(
-                titulo,
-                color = color,
-                fontSize = if (esVeredicto) 30.sp else 18.sp,
-                fontWeight = if (esVeredicto) FontWeight.Black else FontWeight.SemiBold,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            if (detalle != null) {
-                Text(
-                    detalle,
-                    color = Ivory.copy(alpha = 0.8f),
-                    fontSize = 13.sp,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
+    ) { c ->
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            // Placa oscura: la cámara cenital pone piedra de tono medio justo detrás del texto, y sin
+            // ella el contraste depende de la escena (se midió 1,15:1 para "Fallo" sobre el castillo).
+            Surface(shape = RoundedCornerShape(18.dp), color = Color.Black.copy(alpha = 0.62f), contentColor = Ivory) {
+                Column(
+                    Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    if (c.numero != null) {
+                        Text(
+                            c.numero,
+                            color = c.colorNumero,
+                            fontSize = 40.sp,
+                            lineHeight = 42.sp,
+                            fontWeight = FontWeight.Black,
+                            maxLines = 1
+                        )
+                    }
+                    if (c.titulo != null) {
+                        Text(
+                            c.titulo,
+                            color = c.colorTitulo,
+                            // Junto al número es una etiqueta; solo, es el titular.
+                            fontSize = when {
+                                c.numero != null -> 16.sp
+                                c.esVeredicto -> 28.sp
+                                else -> 17.sp
+                            },
+                            lineHeight = if (c.esVeredicto) 32.sp else 21.sp,
+                            fontWeight = if (c.esVeredicto && c.numero == null) FontWeight.Black else FontWeight.Bold,
+                            textAlign = TextAlign.Center,
+                            // La notación de una mesa cargada ("1d20 + 1d12 + 1d10 + 1d8 + 2d6") necesita dos renglones.
+                            maxLines = if (c.esVeredicto) 1 else 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    if (c.detalle != null) {
+                        Text(
+                            c.detalle,
+                            color = Ivory.copy(alpha = 0.85f),
+                            fontSize = 13.sp,
+                            lineHeight = 17.sp,
+                            textAlign = TextAlign.Center,
+                            maxLines = if (c.numero != null && c.titulo != null) 1 else 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
             }
         }
+    }
+}
+
+/** Alto fijo del marcador: que cambie de contenido no mueve el encuadre de la mesa. */
+private val ALTO_MARCADOR = 104.dp
+
+private data class ContenidoMarcador(
+    /** El total, grande. Siempre en marfil salvo que sea lo único que se muestra. */
+    val numero: String? = null,
+    val colorNumero: Color = Ivory,
+    val titulo: String? = null,
+    val colorTitulo: Color = Ivory,
+    val detalle: String? = null,
+    val esVeredicto: Boolean = false
+)
+
+/**
+ * Cómo se lee un veredicto de un vistazo: **el número manda**. "Éxito" con total 19 se muestra como
+ * un 19 grande en marfil y "Éxito" debajo, en su color. Si el título ya es el número ("54"), va solo;
+ * si el sistema no da un total (el Dado Legendario), el título es el titular.
+ */
+private fun contenidoDe(veredicto: Veredicto): ContenidoMarcador {
+    val color = colorDe(veredicto.nivel)
+    val detalle = veredicto.detalle.takeIf { it.isNotBlank() }
+    val aparte = totalFueraDelTitulo(veredicto.titulo, veredicto.total)
+    return when {
+        aparte != null -> ContenidoMarcador("$aparte", Ivory, veredicto.titulo, color, detalle, esVeredicto = true)
+        veredicto.titulo.matches(Regex("""[+−-]?\d+""")) -> ContenidoMarcador(veredicto.titulo, color, detalle = detalle, esVeredicto = true)
+        else -> ContenidoMarcador(titulo = veredicto.titulo, colorTitulo = color, detalle = detalle, esVeredicto = true)
     }
 }
 

@@ -126,5 +126,36 @@ object Ventaja {
     }
 }
 
+/**
+ * Atajos de la franja del pulgar: además de las tiradas guardadas, las últimas tiradas **distintas**
+ * de la que está armada en la mesa. Después de tirar el daño, el atajo que aparece es el ataque (y al
+ * revés): se alternan con un toque, sin guardar nada.
+ */
+object Atajos {
+    const val MAX_RECIENTES = 2
+
+    /** Dos tiradas son "la misma" si coinciden el sistema, los dados y los parámetros. */
+    private fun clave(sistemaId: String, pool: List<DadoEnMesa>, parametros: ParametrosTirada): String =
+        sistemaId + "|" + pool.map { "${it.tipo.name}${it.rol.ordinal}" }.sorted().joinToString(",") + "|" + parametros
+
+    fun recientes(
+        historial: List<EntradaHistorial>,
+        guardadas: List<TiradaGuardada>,
+        sistemaActual: String,
+        poolActual: List<DadoEnMesa>,
+        parametrosActuales: ParametrosTirada,
+        maximo: Int = MAX_RECIENTES
+    ): List<EntradaHistorial> {
+        // No se repite lo que ya está a un toque: la mesa actual (LANZAR) y las guardadas (su atajo).
+        val vistas = HashSet<String>()
+        vistas += clave(sistemaActual, poolActual, parametrosActuales)
+        guardadas.forEach { vistas += clave(it.sistemaId, it.pool, it.parametros) }
+        return historial.asSequence()
+            .filter { it.pool.isNotEmpty() && vistas.add(clave(it.sistemaId, it.pool, it.parametros)) }
+            .take(maximo)
+            .toList()
+    }
+}
+
 /** Límite del historial: alcanza para una sesión larga sin crecer sin fin en DataStore. */
 const val MAX_HISTORIAL = 50

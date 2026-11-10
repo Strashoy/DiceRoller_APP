@@ -31,9 +31,10 @@ object Rolesencia : SistemaReglas {
 
     override val id = "rolesencia"
     override val nombre = "Rolesencia (Dado Legendario)"
+    override val nombreCorto = "Rolesencia"
     override val descripcion = "d12 Legendario: 10–12 Éxito Legendario, 8–9 Éxito Parcial, 1–7 decide la " +
         "capacidad (caras del dado de Atributo ≥ dificultad). Atributo ≥ dificultad: éxito. Dificultad 3: enfrentada."
-    override val campoObjetivo = CampoParametro("Dificultad", 3..10, 4)
+    override val campoObjetivo = CampoParametro("Dificultad", 3..10, 4, etiquetaCorta = "Dif.")
 
     override fun tiradaSugerida() = pool {
         agregar(TipoDado.LEGENDARIO)

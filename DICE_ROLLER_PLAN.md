@@ -173,6 +173,7 @@ Las dos dependencias 3D ya están declaradas en `gradle/libs.versions.toml` y **
 | 4b | **Interfaz a pantalla completa**: mesa a sangre, barras superpuestas con área útil para la cámara, hojas inferiores, modo inmersivo (bitácora, cap. 12) | ✅ |
 | 4c | **Atajos de las apps pagas**: historial (50) con "otra vez", tiradas guardadas, notación, ventaja con pulsación larga, agitar para lanzar, voz, deshacer (bitácora, cap. 13) | ✅ |
 | 4d | **Tiradas a Discord**: webhook del canal, bandeja de salida que espera a la red y caduca a los 10 minutos, tirada oculta, marca en el historial (bitácora, cap. 19). Falta probar un envío real contra un webhook propio | ✅ |
+| 4e | **Pantalla para teléfonos angostos**: el total manda (placa, CD opcional), atajos de guardadas y recientes, dados en uso primero, nombres cortos, hoja "Tirada" con pasos de 5, deshacer, paleta de Material completa (bitácora, cap. 20) | ✅ |
 | 5 | Pulido: modelos glTF + SceneView (PBR), materiales de dados, optimización en gama baja, publicación | ⏳ |
 
 ## 8. Fuentes consultadas

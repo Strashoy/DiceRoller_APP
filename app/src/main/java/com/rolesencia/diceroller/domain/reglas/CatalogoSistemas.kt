@@ -24,11 +24,11 @@ object CatalogoSistemas {
         tipo = TipoDado.D10, umbral = 10
     )
     val MUNDO_DE_TINIEBLAS = ConteoExitos(
-        id = "wod", nombre = "Mundo de Tinieblas clásico",
+        id = "wod", nombre = "Mundo de Tinieblas clásico", nombreCorto = "Mundo de Tinieblas",
         tipo = TipoDado.D10, umbral = 6, unosRestan = true
     )
     val CRONICAS_DE_LA_OSCURIDAD = ConteoExitos(
-        id = "cofd", nombre = "Crónicas de la Oscuridad",
+        id = "cofd", nombre = "Crónicas de la Oscuridad", nombreCorto = "Crónicas (CofD)",
         tipo = TipoDado.D10, umbral = 8, explotaCon = 10, excepcional = 5
     )
     val EXALTED = ConteoExitos(
