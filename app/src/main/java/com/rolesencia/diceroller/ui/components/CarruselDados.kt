@@ -23,6 +23,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import com.rolesencia.diceroller.domain.dados.ordenParaElegir
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -77,19 +85,38 @@ fun CarruselDados(
     skinActual: SkinDado,
     onAgregar: (TipoDado) -> Unit,
     onQuitar: (TipoDado) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Al cambiar de sistema de juego la fila se reordena (ver más abajo). */
+    sistemaId: String = ""
 ) {
     LocalAmbiente.current   // los colores "Por tipo" dependen del ambiente: repintar si cambia
+
+    // Primero los dados que están en la mesa: en 320 dp entran cuatro o cinco fichas, y con el orden
+    // fijo (d4, d6, d8…) el d20 de D&D quedaba fuera de la vista.
+    // El orden NO cambia mientras se arma la tirada: si la ficha se corriera al tocarla, el segundo
+    // toque caería en otro dado. Se reordena cuando nadie está tocando: al cambiar de sistema y al
+    // empezar y terminar una tirada (ahí, además, la fila vuelve al principio para mostrar lo que salió).
+    val estado = rememberLazyListState()
+    var orden by remember { mutableStateOf(ordenParaElegir(pool)) }
+    val poolActual by rememberUpdatedState(pool)
+    LaunchedEffect(sistemaId, estaRodando) {
+        orden = ordenParaElegir(poolActual)
+        estado.animateScrollToItem(0)
+    }
+
     LazyRow(
-        modifier.fillMaxWidth().height(ALTO_FILA),
+        // Mientras ruedan los dados la fila se aparta, como el resto de los controles.
+        modifier.fillMaxWidth().height(ALTO_FILA).alpha(if (estaRodando) 0.35f else 1f),
+        state = estado,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        items(TipoDado.entries, key = { it.name }) { tipo ->
+        items(orden, key = { it.name }) { tipo ->
             val enMesa = pool.filter { it.tipo == tipo }
             val valores = if (estaRodando) emptyList() else resultados.filter { it.dado.tipo == tipo }
             GrupoTipo(
+                modifier = Modifier.animateItem(),
                 tipo = tipo,
                 // El ícono toma la skin del dado de ese tipo que ya está en la mesa, o la elegida.
                 muestra = enMesa.firstOrNull() ?: DadoEnMesa(-1, tipo, skin = skinActual),
@@ -120,13 +147,14 @@ private fun GrupoTipo(
     destacados: Set<Int>,
     habilitado: Boolean,
     onAgregar: () -> Unit,
-    onQuitar: () -> Unit
+    onQuitar: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val nombre = if (tipo == TipoDado.LEGENDARIO) "Legendario" else tipo.etiqueta
     val conResultado = resultados.isNotEmpty()
     val acento = LocalAcento.current
     // La columna toma el ancho de la ficha (que crece con varios resultados) y la franja del "−" lo llena.
-    Column(Modifier.width(IntrinsicSize.Max), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier.width(IntrinsicSize.Max), horizontalAlignment = Alignment.CenterHorizontally) {
     // "−" encima del recuadro: la pulsación larga no se descubre sola (todo gesto necesita un
     // control a la vista). Toda la franja, a lo ancho de la ficha, es zona de "quitar", y un espacio
     // libre la separa del recuadro: tocar cerca del "−" nunca agrega un dado por error. Los tipos sin

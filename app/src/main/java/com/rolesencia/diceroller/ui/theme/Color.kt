@@ -28,9 +28,28 @@ val RojoSobreOscuro = Color(0xFFFF6B6B)
 /** Color de los dados con [com.rolesencia.diceroller.domain.dados.RolDado.ESPECIAL] (Hambre, Miedo, Legendario…). */
 val ColorDadoEspecial = Color(0xFFB71C1C)
 
+/** Violeta para texto sobre fondos oscuros: [PurpuraMistico] da 2,8:1; este, 7,3:1. */
+val VioletaSobreOscuro = Color(0xFFCE93D8)
+
+// --- SUPERFICIES Y CONTENEDORES (el esquema completo de Material, en la gama de la app) ---
+// Sin esto, chips seleccionados, botones tonales, menús e interruptores salían en el gris
+// violáceo que trae Material por defecto.
+val AzulNoche = Color(0xFF08121D)
+val AzulProfundo = Color(0xFF101F30)
+val AzulMenu = Color(0xFF152536)
+val AzulRealce = Color(0xFF243447)
+val AzulContenedor = Color(0xFF1A5173)
+val CelesteSobreContenedor = Color(0xFFD6EEFF)
+val GrisContorno = Color(0xFF7C8EA3)
+val GrisContornoSuave = Color(0xFF33455A)
+
+/**
+ * Color del veredicto **como texto** sobre el fondo oscuro de la app. Fallo y pifia usan sus
+ * versiones claras: el rojo y el violeta saturados no llegan al contraste mínimo.
+ */
 fun colorDe(nivel: NivelResultado): Color = when (nivel) {
-    NivelResultado.FALLO_CRITICO -> PurpuraMistico
-    NivelResultado.FALLO -> RojoFallo
+    NivelResultado.FALLO_CRITICO -> VioletaSobreOscuro
+    NivelResultado.FALLO -> RojoSobreOscuro
     NivelResultado.EXITO_PARCIAL -> NaranjaCostoso
     NivelResultado.EXITO -> VerdeExito
     NivelResultado.EXITO_CRITICO -> DoradoLegendario

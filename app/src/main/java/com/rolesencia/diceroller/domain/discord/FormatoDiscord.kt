@@ -1,11 +1,11 @@
 package com.rolesencia.diceroller.domain.discord
 
 import com.rolesencia.diceroller.domain.reglas.NivelResultado
+import com.rolesencia.diceroller.domain.reglas.totalFueraDelTitulo
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
-import kotlin.math.abs
 
 /** Lo que se publica de una tirada ya resuelta. */
 data class MensajeTirada(
@@ -70,10 +70,8 @@ object FormatoDiscord {
 
     /** "Éxito · 19": el veredicto y, si el título no lo dice, el número. En suma libre, sólo "54". */
     internal fun cabecera(mensaje: MensajeTirada): String {
-        val total = mensaje.total ?: return mensaje.titulo
-        val buscado = abs(total).toString()
-        val yaEsta = Regex("""\d+""").findAll(mensaje.titulo).any { it.value == buscado }
-        return if (yaEsta) mensaje.titulo else "${mensaje.titulo} · $total"
+        val total = totalFueraDelTitulo(mensaje.titulo, mensaje.total) ?: return mensaje.titulo
+        return "${mensaje.titulo} · $total"
     }
 
     private const val COLOR_NEUTRO = 0x00BFFF

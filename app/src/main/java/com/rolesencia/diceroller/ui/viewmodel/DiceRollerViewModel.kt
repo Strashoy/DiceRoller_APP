@@ -112,7 +112,7 @@ class DiceRollerViewModel(
                     dadosEnMesa = disposicion(pool, mesaPara(pool.size, prefs.modeloTorre), prefs.modeloTorre),
                     parametros = ParametrosTirada(
                         modificador = prefs.modificador,
-                        objetivo = prefs.objetivo ?: sistema.campoObjetivo?.porDefecto,
+                        objetivo = prefs.objetivo ?: sistema.campoObjetivo?.inicial,
                         conservar = prefs.conservar
                     ),
                     modo = prefs.modo,
@@ -199,7 +199,7 @@ class DiceRollerViewModel(
         it.copy(
             sistema = sistema,
             pool = sistema.tiradaSugerida().map { d -> d.copy(skin = skinPara(it, sistema, d.rol)) },
-            parametros = ParametrosTirada(objetivo = sistema.campoObjetivo?.porDefecto)
+            parametros = ParametrosTirada(objetivo = sistema.campoObjetivo?.inicial)
         )
     }
 
@@ -209,13 +209,27 @@ class DiceRollerViewModel(
 
     fun cambiarObjetivo(delta: Int) = editarMesa { estado ->
         val campo = estado.sistema.campoObjetivo ?: return@editarMesa estado
-        val actual = estado.parametros.objetivo ?: campo.porDefecto
-        val nuevo = (actual + delta).coerceIn(campo.rango.first, campo.rango.last)
+        // Sin objetivo fijado (la CD opcional de D&D), el primer toque lo pone en su valor habitual.
+        val actual = estado.parametros.objetivo
+        val nuevo = if (actual == null) campo.porDefecto else (actual + delta).coerceIn(campo.rango.first, campo.rango.last)
         estado.copy(parametros = estado.parametros.copy(objetivo = nuevo))
     }
 
+    /** "Sin CD": se tira sin juzgar y el marcador muestra sólo el total (sólo si el sistema lo permite). */
+    fun quitarObjetivo() = editarMesa { estado ->
+        if (estado.sistema.campoObjetivo?.opcional != true) return@editarMesa estado
+        estado.copy(parametros = estado.parametros.copy(objetivo = null))
+    }
+
+    /**
+     * Ventaja, desventaja o normal desde la hoja "Tirada". Hace lo mismo que el menú de LANZAR, sin
+     * lanzar: en el sistema d20 también agrega o quita el segundo d20.
+     */
     fun cambiarConservar(modo: Conservar) = editarMesa {
-        it.copy(parametros = it.parametros.copy(conservar = modo))
+        it.copy(
+            pool = Ventaja.ajustarPool(it.sistema.id, it.pool, modo, it.skinActual),
+            parametros = it.parametros.copy(conservar = modo)
+        )
     }
 
     // --- DADOS EN LA MESA ---
@@ -532,9 +546,29 @@ class DiceRollerViewModel(
         viewModelScope.launch { gestorPreferencias.guardarTiradas(lista) }
     }
 
+    /** "Deshacer" tras borrar una guardada (vuelve al final de la lista). */
+    fun restaurarTiradaGuardada(tirada: TiradaGuardada) {
+        _uiState.update { s ->
+            if (s.tiradasGuardadas.any { it.nombre.equals(tirada.nombre, ignoreCase = true) }) s
+            else s.copy(tiradasGuardadas = s.tiradasGuardadas + tirada)
+        }
+        val lista = _uiState.value.tiradasGuardadas
+        viewModelScope.launch { gestorPreferencias.guardarTiradas(lista) }
+    }
+
     fun borrarHistorial() {
         _uiState.update { it.copy(historial = emptyList()) }
         viewModelScope.launch { gestorPreferencias.guardarHistorial(emptyList()) }
+    }
+
+    /** "Deshacer" tras borrar el historial: vuelve lo borrado, debajo de lo que se haya tirado después. */
+    fun restaurarHistorial(borrado: List<EntradaHistorial>) {
+        _uiState.update { s ->
+            val nuevas = s.historial.map { it.instante }.toSet()
+            s.copy(historial = (s.historial + borrado.filterNot { it.instante in nuevas }).take(MAX_HISTORIAL))
+        }
+        val historial = _uiState.value.historial
+        viewModelScope.launch { gestorPreferencias.guardarHistorial(historial) }
     }
 
     // --- LANZAMIENTO ---

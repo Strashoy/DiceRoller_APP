@@ -51,6 +51,16 @@ data class DadoEnMesa(
     val skin: SkinDado = CatalogoSkins.POR_TIPO
 )
 
+/**
+ * En qué orden ofrecer los tipos de dado: primero los que están en la mesa y después el resto, cada
+ * grupo en su orden natural. En un teléfono angosto entran cuatro o cinco fichas; así el dado que se
+ * está usando (el d20 en D&D) nunca queda fuera de la vista.
+ */
+fun ordenParaElegir(pool: List<DadoEnMesa>): List<TipoDado> {
+    val enMesa = pool.map { it.tipo }.toSet()
+    return TipoDado.entries.filter { it in enMesa } + TipoDado.entries.filterNot { it in enMesa }
+}
+
 /** El valor leído de un dado una vez quieto. */
 data class ResultadoDado(
     val dado: DadoEnMesa,

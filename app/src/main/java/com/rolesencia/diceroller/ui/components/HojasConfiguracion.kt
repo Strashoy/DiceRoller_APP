@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -78,6 +81,7 @@ fun HojaParametros(
     habilitado: Boolean,
     onModificador: (Int) -> Unit,
     onObjetivo: (Int) -> Unit,
+    onQuitarObjetivo: () -> Unit,
     onConservar: (Conservar) -> Unit,
     onTiradaSugerida: () -> Unit,
     onCerrar: () -> Unit
@@ -91,7 +95,7 @@ fun HojaParametros(
         Column(
             Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             ControlesParametros(
                 parametros = parametros,
@@ -99,6 +103,7 @@ fun HojaParametros(
                 campoObjetivo = campoObjetivo,
                 onModificador = onModificador,
                 onObjetivo = onObjetivo,
+                onQuitarObjetivo = onQuitarObjetivo,
                 onConservar = onConservar,
                 habilitado = habilitado
             )
@@ -113,10 +118,13 @@ fun HojaParametros(
 fun resumenParametros(parametros: ParametrosTirada, usaModificador: Boolean, campoObjetivo: CampoParametro?): String {
     val partes = buildList {
         if (usaModificador) add(if (parametros.modificador >= 0) "+${parametros.modificador}" else "${parametros.modificador}")
-        if (campoObjetivo != null) add("${campoObjetivo.etiqueta} ${parametros.objetivo ?: campoObjetivo.porDefecto}")
+        if (campoObjetivo != null) {
+            val objetivo = parametros.objetivo ?: campoObjetivo.inicial
+            add(if (objetivo != null) "${campoObjetivo.etiqueta} $objetivo" else "sin ${campoObjetivo.etiqueta}")
+        }
         when (parametros.conservar) {
-            Conservar.MAYOR -> add("Mayor")
-            Conservar.MENOR -> add("Menor")
+            Conservar.MAYOR -> add("con ventaja")
+            Conservar.MENOR -> add("con desventaja")
             Conservar.TODOS -> Unit
         }
     }
@@ -182,32 +190,6 @@ fun HojaAjustes(
             // hoja se abre entera y el campo queda a la vista.
             ApartadoDiscord(discord, pruebaDiscord, onDiscord, onProbarDiscord, alEnfocarCampo = { alcance.launch { estadoHoja.expand() } })
 
-            Seccion("Quién decide el número")
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                ModoDecision.entries.forEachIndexed { i, m ->
-                    SegmentedButton(
-                        selected = modo == m,
-                        onClick = { onModo(m) },
-                        enabled = habilitado,
-                        shape = SegmentedButtonDefaults.itemShape(i, ModoDecision.entries.size),
-                        label = { Text(m.titulo, maxLines = 1) }
-                    )
-                }
-            }
-            Spacer(Modifier.height(12.dp))
-            when (modo) {
-                ModoDecision.FISICA_REAL -> ApartadoFisicaReal(metricas)
-                ModoDecision.PREDETERMINADO -> ApartadoPredeterminado(
-                    pool = pool,
-                    elegirValores = elegirValores,
-                    valoresElegidos = valoresElegidos,
-                    habilitado = habilitado,
-                    onToggleElegir = onToggleElegir,
-                    onCiclarValor = onCiclarValor,
-                    metricas = metricas
-                )
-            }
-
             if (!hayTorre) {
                 Seccion("Superficie de la bandeja")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -233,17 +215,51 @@ fun HojaAjustes(
             Seccion("Pantalla")
             Interruptor("Pantalla completa", "Oculta las barras del sistema; deslizá desde el borde para verlas", pantallaCompleta, onPantallaCompleta)
             Interruptor("Mantener encendida", "Que no se apague en medio de la partida", pantallaEncendida, onPantallaEncendida)
+
+            // Lo técnico va al final: se toca una vez, si se toca. Antes abría la hoja y empujaba
+            // zurdos, agitar y sonido fuera de la vista.
+            Seccion("Avanzado · quién decide el número")
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                ModoDecision.entries.forEachIndexed { i, m ->
+                    SegmentedButton(
+                        selected = modo == m,
+                        onClick = { onModo(m) },
+                        enabled = habilitado,
+                        shape = SegmentedButtonDefaults.itemShape(i, ModoDecision.entries.size),
+                        // Sin el tilde: con él, "Resultado predeterminado" se cortaba en "Resultado".
+                        icon = {},
+                        label = { Text(m.titulo, maxLines = 2, fontSize = 13.sp, lineHeight = 15.sp, textAlign = TextAlign.Center) }
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            when (modo) {
+                ModoDecision.FISICA_REAL -> ApartadoFisicaReal(metricas)
+                ModoDecision.PREDETERMINADO -> ApartadoPredeterminado(
+                    pool = pool,
+                    elegirValores = elegirValores,
+                    valoresElegidos = valoresElegidos,
+                    habilitado = habilitado,
+                    onToggleElegir = onToggleElegir,
+                    onCiclarValor = onCiclarValor,
+                    metricas = metricas
+                )
+            }
         }
     }
 }
 
 @Composable
 internal fun Interruptor(titulo: String, detalle: String, valor: Boolean, onCambio: () -> Unit) {
+    // Toda la fila es el interruptor (antes sólo respondía el control de la derecha): un objetivo
+    // grande que alcanza cualquiera de los dos pulgares, y que TalkBack anuncia una sola vez.
     ListItem(
         headlineContent = { Text(titulo) },
         supportingContent = { Text(detalle, fontSize = 12.sp) },
-        trailingContent = { Switch(checked = valor, onCheckedChange = { onCambio() }) },
+        trailingContent = { Switch(checked = valor, onCheckedChange = null) },
         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(value = valor, role = Role.Switch, onValueChange = { onCambio() })
     )
 }

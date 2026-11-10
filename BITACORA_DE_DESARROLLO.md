@@ -805,6 +805,61 @@ que falta: pegar un webhook real y ver llegar una tirada al canal.
 
 ---
 
+## Capítulo 20 · La pantalla en un teléfono angosto: el número manda
+
+**El pedido.** "Hacé commit de los cambios y seguí con la UX". La auditoría del capítulo 19 había
+dejado diez hallazgos medidos en un Realme de 320 × 715 dp; este capítulo los arregla.
+
+**La solución, de arriba hacia abajo.**
+
+| Qué se veía mal (medido) | Cómo quedó |
+|---|---|
+| "Fallo" en rojo sobre la piedra: contraste 1,15:1. En d20 el título era "Fallo" y el total iba en 13 sp | **El número manda**: total en 40 sp y en marfil sobre una placa oscura; el veredicto debajo, como etiqueta, en un rojo y un violeta más claros. "Fallo" medido en la captura: **5,8:1** |
+| La CD arrancaba en 15 y juzgaba contra un número que nadie había dicho | En D&D **la CD es opcional** y arranca vacía: sin CD se ve sólo el total. "Sin CD" la quita; cualquier + o − la fija en 15 |
+| "Sum…", "d20 c…", "+0 · CD…", "Dados ·…" | Cada sistema tiene un nombre corto ("D&D 5e (d20)"); en menos de 380 dp el escenario es sólo su ícono; "Tirada" muestra el modificador en grande y el objetivo en corto; la cantidad de dados es una insignia |
+| Entraban 4,75 fichas y en D&D el d20 quedaba fuera de la fila | Los dados que están en la mesa van primero |
+| El historial estaba al 9 % de la altura; lanzar una guardada eran 3 toques | **Fila de atajos** sobre los dados: Historial, las guardadas y las dos últimas tiradas distintas de la que está en la mesa |
+| El modificador se movía de a 1; "Mayor/Menor" en la hoja y "ventaja/desventaja" en LANZAR | Pasos de 1 y de 5 con botones de 48 dp; "Normal · Ventaja · Desventaja", que ahora también agrega o quita el segundo d20 |
+| "Borrar historial" y la ✕ de una guardada no tenían vuelta atrás | "Deshacer" dentro de la hoja |
+| Chips, segmentos y menús en un gris violáceo ajeno a la app | El esquema oscuro define todos los roles de color de Material |
+| La solapa de dados abría desde la derecha aun en modo zurdo; las skins, al 11 % de la altura | Sale del lado de su botón y las skins quedan fijas abajo |
+| Ajustes abría con la explicación técnica de "Resultado predeterminado" (cortado en "Resultado") | El modo de decisión pasó al final, como "Avanzado"; toda la fila de cada opción es el interruptor |
+
+Además: "Recién" en vez de "Hace 0 minutos", la fila de dados se atenúa mientras ruedan, y la hoja
+de guardadas se abre entera al escribir el nombre (el teclado tapaba el campo, igual que en Discord).
+
+**Problemas y soluciones.**
+
+| Problema | Causa | Solución |
+|---|---|---|
+| Reordenar la fila de dados podía hacer que el segundo toque cayera en otro dado | Si la ficha tocada se corre al principio, lo que queda bajo el dedo es otra | El orden sólo cambia cuando nadie toca: al cambiar de sistema y al empezar o terminar una tirada. Mientras se arma la tirada, cada ficha se queda donde está |
+| La solapa de dados no se convirtió en hoja inferior, como proponía la auditoría | Una hoja inferior tapa la bandeja de la torre, que es donde se ve caer cada dado que se agrega; la solapa lateral la deja a la vista | Se arregló lo que estaba mal sin cambiar de patrón: lado según la mano y skins abajo |
+| La torre se encuadraba detrás del marcador | El alto de las barras se medía por dentro de los márgenes del sistema: en un teléfono con recorte de cámara faltaban 36 dp | Se mide por fuera (el mismo valor ubica el indicador de Discord y los avisos) |
+| El "Deshacer" no se podía mostrar con el aviso de siempre | La hoja inferior es otra ventana y tapa los avisos de la pantalla | Una fila "Borraste… · Deshacer" dentro de la hoja |
+| En el marcador, "1d20 + 1d12 + 1d10 + 1d8 +…" | La notación de una mesa cargada no entra en un renglón de 320 dp | Dos renglones para lo que no es un veredicto |
+| Elegir "Ventaja" en la hoja no cambiaba nada con un solo d20 | Sólo el menú de LANZAR agregaba el segundo d20 | La hoja usa la misma función (`Ventaja.ajustarPool`) |
+
+**Verificación.** 117 tests (11 nuevos: orden de la fila, total aparte del título, CD opcional,
+largo de los nombres cortos y atajos). En el Realme, con medidas y capturas: el sistema se lee
+entero, ningún texto cortado en la pantalla principal, el d20 primero en la fila, "Fallo" a 5,8:1,
+botones de 48 dp en la hoja "Tirada", guardar una tirada y verla como atajo, alternar entre dos
+tiradas sólo con los atajos, "Deshacer" del historial (11 entradas) y de una guardada, y la solapa
+del lado izquierdo en modo zurdo con las skins al 95 % de la altura. **No se probó** en un teléfono
+ancho (en el A33 la barra superior muestra otra vez el nombre del escenario) ni con TalkBack.
+
+**Lo que aprendimos.**
+
+- Un teléfono de 320 dp es el mejor revisor de una interfaz: lo que ahí entra, entra en todos.
+- Contraste "a ojo" no alcanza sobre una escena 3D: el fondo cambia con la cámara. Una placa propia
+  vuelve medible lo que se promete.
+- Antes de reemplazar un patrón conviene preguntarse qué hacía bien: la solapa lateral dejaba ver la
+  mesa, y eso no figuraba en la lista de problemas.
+
+**De acá salió…** lo que quedó sin resolver de la auditoría (ver "Ideas pendientes"): la barra de
+estado que reaparece al abrir una hoja y el orden del desglose respecto de las fichas.
+
+---
+
 ## Patrones que se repitieron
 
 1. **Imitar lo que haría una persona.** Verter de a poco, golpear la torre, empujar un dado montado,
@@ -857,7 +912,8 @@ Investigación de apps pagas ──► mesa a pantalla completa (interfaz superp
                 └─► "compartir una tirada con el grupo" ──► tiradas a Discord (webhook, bandeja de salida, tirada oculta)
 
 Auditoría en un teléfono de 320 dp ──► hallazgos medidos (contraste del veredicto, d20 fuera de la fila, textos cortados)
-        └─► valores elegidos a mano ──► esas tiradas no se publican en Discord
+        ├─► valores elegidos a mano ──► esas tiradas no se publican en Discord
+        └─► el número manda (placa, CD opcional), atajos en la franja del pulgar, dados en uso primero, paleta completa
 ```
 
 ## Ideas pendientes (de dónde salieron)
@@ -870,17 +926,11 @@ Auditoría en un teléfono de 320 dp ──► hallazgos medidos (contraste del 
 | Otras aberturas para el cuero (ojos de buey con aro de latón, calado, escudo) | Capítulo 11 (opciones no elegidas). |
 | Que en la bandeja los dados también entren desde fuera de la pantalla | Capítulo 14. |
 | Sugerir skins que contrasten con cada escenario | Capítulo 16. |
-| El total siempre grande y en marfil, con el veredicto como etiqueta; rojo y violeta más claros para "Fallo" y "¡1 natural!" | Capítulo 19: "Fallo" medido en 1,15:1 sobre la piedra del castillo. |
-| CD opcional en d20: sin CD, mostrar sólo el total | Capítulo 19: la CD arranca en 15 y juzga contra un número que nadie dijo. |
-| En el carrusel, primero los dados que están en la mesa | Capítulo 19: en 320 dp entran 4,75 fichas; en d20, el único dado en juego queda fuera de pantalla. |
-| Que no se corten "Suma libre", "d20 contra CD", "+0 · CD 15" ni "Dados · 6" en pantallas angostas | Capítulo 19: los cuatro se cortan en 320 dp. |
-| Guardadas y recientes a un toque, en la franja del pulgar | Capítulo 19: el historial está al 9 % de la altura y lanzar una guardada son 3 toques. |
-| Modificador de a 5, y las mismas palabras para ventaja en la hoja "Tirada" y en LANZAR | Capítulo 19. |
-| "Deshacer" al borrar el historial o una tirada guardada | Capítulo 19: "Borrar historial" queda donde descansa el pulgar y no confirma. |
-| Completar el esquema de colores de Material (chips, botón segmentado y menús salen en un gris violáceo ajeno a la paleta) | Capítulo 19. |
-| La solapa de dados como hoja inferior (hoy abre siempre desde la derecha, también en modo zurdo) | Capítulo 19. |
-| `altoSuperior` y `altoInferior` no cuentan los márgenes del sistema: el encuadre de la cámara y los avisos quedan corridos en teléfonos con recorte | Capítulo 19 (36 dp en el Realme). |
 | Probar Discord con un webhook real y sin conexión en el teléfono | Capítulo 19 (lo que no se pudo verificar). |
+| Que la barra de estado no reaparezca al abrir una hoja en modo inmersivo | Capítulos 19 y 20 (auditoría). |
+| Que el desglose del marcador siga el orden de las fichas del carrusel | Capítulo 20. |
+| Probar la pantalla nueva en un teléfono ancho y con TalkBack | Capítulo 20 (lo que no se pudo verificar). |
+| Tiradas con muchos dados: las fichas con resultado todavía pueden pasarse del ancho en 320 dp | Capítulo 20 (con seis dados, la del d20 queda cortada). |
 
 Las ideas que salieron de la investigación de la competencia están en
 [INVESTIGACION_COMPETENCIA.md](INVESTIGACION_COMPETENCIA.md) §4.

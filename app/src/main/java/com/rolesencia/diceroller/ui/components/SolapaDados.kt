@@ -28,6 +28,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -91,11 +92,15 @@ fun SolapaDados(
     onBorrarSkin: (SkinDado) -> Unit,
     modifier: Modifier = Modifier,
     /** Cada vez que cambia (y es > 0) la solapa se abre. Lo usa el botón "Dados" de la barra inferior. */
-    solicitudApertura: Int = 0
+    solicitudApertura: Int = 0,
+    /** Controles para zurdos: el botón "Dados" está a la izquierda y la solapa sale de ese mismo lado. */
+    aLaIzquierda: Boolean = false
 ) {
     val anchoPx = with(LocalDensity.current) { ANCHO_PANEL.toPx() }
-    // Desplazamiento del panel hacia la derecha: anchoPx = cerrada, 0 = abierta.
+    // Cuánto le falta al panel para estar abierto: anchoPx = cerrada (fuera de la pantalla), 0 = abierta.
+    // Hacia qué lado se esconde lo decide [haciaAfuera]: +1 a la derecha, −1 a la izquierda.
     val desplazamiento = remember { Animatable(anchoPx) }
+    val haciaAfuera = if (aLaIzquierda) -1f else 1f
     val scope = rememberCoroutineScope()
     val progreso = (1f - desplazamiento.value / anchoPx).coerceIn(0f, 1f)
     val vista = LocalView.current
@@ -116,7 +121,7 @@ fun SolapaDados(
     }
 
     val arrastre = rememberDraggableState { delta ->
-        scope.launch { desplazamiento.snapTo((desplazamiento.value + delta).coerceIn(0f, anchoPx)) }
+        scope.launch { desplazamiento.snapTo((desplazamiento.value + delta * haciaAfuera).coerceIn(0f, anchoPx)) }
     }
 
     BackHandler(enabled = progreso > 0.01f) { asentar(1000f) }
@@ -135,38 +140,33 @@ fun SolapaDados(
 
         Row(
             modifier = Modifier
-                .align(Alignment.CenterEnd)
+                .align(if (aLaIzquierda) Alignment.CenterStart else Alignment.CenterEnd)
                 .fillMaxHeight()
-                .offset { IntOffset(desplazamiento.value.roundToInt(), 0) },
+                .offset { IntOffset((desplazamiento.value * haciaAfuera).roundToInt(), 0) },
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // El panel: los dados se desplazan arriba y las skins quedan fijas abajo.
             Column(
                 Modifier
                     .width(ANCHO_PANEL)
                     .fillMaxHeight()
-                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(topStart = 18.dp, bottomStart = 18.dp))
-                    .draggable(arrastre, Orientation.Horizontal, onDragStopped = { asentar(it) })
-                    .safeDrawingPadding()
+                    .background(
+                        MaterialTheme.colorScheme.surfaceVariant,
+                        if (aLaIzquierda) RoundedCornerShape(topEnd = 18.dp, bottomEnd = 18.dp)
+                        else RoundedCornerShape(topStart = 18.dp, bottomStart = 18.dp)
+                    )
+                    .draggable(arrastre, Orientation.Horizontal, onDragStopped = { asentar(it * haciaAfuera) })
+                    .safeDrawingPadding(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+            Column(
+                Modifier
+                    .weight(1f)
                     .verticalScroll(rememberScrollState())
                     .padding(vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Desplegable de skins: con qué colores se agregan los dados.
-                SelectorSkin(
-                    skinActual = skinActual,
-                    personalizadas = skinsPersonalizadas,
-                    especial = especial,
-                    skinsDelSistema = skinsDelSistema,
-                    habilitado = habilitado,
-                    onElegir = onElegirSkin,
-                    onToggleEspecial = onToggleEspecial,
-                    onToggleSkinsDelSistema = onToggleSkinsDelSistema,
-                    onAplicarATodos = onAplicarSkinATodos,
-                    onCrear = onCrearSkin,
-                    onEditar = onEditarSkin,
-                    onBorrar = onBorrarSkin
-                )
                 val rol = if (especial) RolDado.ESPECIAL else RolDado.NORMAL
                 // Orden ascendente de arriba hacia abajo: d4, d6, d8, d10, d12, d20, d%, dF y el Legendario.
                 TipoDado.entries.forEachIndexed { i, tipo ->
@@ -213,6 +213,26 @@ fun SolapaDados(
                         Text(if (tipo == TipoDado.LEGENDARIO) "Legendario" else tipo.etiqueta, color = Ivory, fontSize = 12.sp)
                     }
                 }
+            }
+            // Skins: con qué colores se agregan los dados. Abajo, donde llega el pulgar (antes estaba
+            // arriba de todo, al 11 % de la altura); su menú se despliega hacia arriba.
+            HorizontalDivider(color = Ivory.copy(alpha = 0.12f))
+            Box(Modifier.padding(vertical = 8.dp)) {
+                SelectorSkin(
+                    skinActual = skinActual,
+                    personalizadas = skinsPersonalizadas,
+                    especial = especial,
+                    skinsDelSistema = skinsDelSistema,
+                    habilitado = habilitado,
+                    onElegir = onElegirSkin,
+                    onToggleEspecial = onToggleEspecial,
+                    onToggleSkinsDelSistema = onToggleSkinsDelSistema,
+                    onAplicarATodos = onAplicarSkinATodos,
+                    onCrear = onCrearSkin,
+                    onEditar = onEditarSkin,
+                    onBorrar = onBorrarSkin
+                )
+            }
             }
         }
     }

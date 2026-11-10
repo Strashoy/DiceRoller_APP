@@ -16,23 +16,28 @@
 | # | Principio | Por qué | En Dice Roller |
 |---|---|---|---|
 | 1 | **El gráfico ocupa la pantalla y los controles se superponen abajo** | Ninguna app de referencia pone el canvas arriba y los controles "debajo con scroll". Cámaras (Halide: "todos los controles al alcance del pulgar"), mapas (hoja inferior no modal) y dados 3D (Dice by PCalc, Dicenomicon) superponen o anclan abajo. | Mesa 3D a sangre; barra superior y franja inferior superpuestas sobre degradés. La cámara encuadra la mesa **en el área que no tapan las barras**. |
-| 2 | **La acción principal, abajo y al centro** | Hoober (UXmatters): 49 % usa el teléfono con una mano; la precisión va de 7 mm en el centro a 12 mm en las esquinas. Fitts: el objetivo frecuente, grande y cerca del pulgar. | LANZAR de 64 dp al centro de la franja inferior; secundarios a sus lados; lo terciario (historial, ajustes) arriba. |
+| 2 | **La acción principal, abajo y al centro** | Hoober (UXmatters): 49 % usa el teléfono con una mano; la precisión va de 7 mm en el centro a 12 mm en las esquinas. Fitts: el objetivo frecuente, grande y cerca del pulgar. | LANZAR de 64 dp al centro de la franja inferior; secundarios a sus lados; arriba sólo queda lo que se elige una vez por sesión (sistema, escenario, ajustes). |
 | 3 | **Los bordes laterales son del sistema** | Con navegación por gestos (Android 10+), deslizar desde un borde lateral es "Atrás". La exclusión (`setSystemGestureExclusionRects`) sólo se respeta en los **200 dp de abajo** de cada borde y es "una vía de escape, no un patrón" (Chris Banes). Google reconoció que sólo un 3–7 % abría cajones deslizando desde el borde. | **Sin manija ni gesto desde el borde.** La solapa de dados se abre con el botón "Dados". |
 | 4 | **Todo gesto tiene un control visible** | Los gestos (deslizar, agitar, mantener) se descubren poco; Material pide siempre una alternativa visible. Las reseñas de Dice by PCalc se quejan de que agitar "necesitaba una sacudida fuerte". | Deslizar sobre la mesa y agitar son atajos; LANZAR siempre está. Mantener LANZAR (ventaja) lo anuncia la pista de las primeras tiradas. Quitar un dado manteniéndolo apretado tiene su **"−" visible** en cada dado del carrusel, una **pista en el momento justo** las dos primeras veces que se agrega un dado, y una acción "quitar" que anuncia TalkBack. |
 | 5 | **Componer y después confirmar** | Owlbear Rodeo 1.0 tiraba al tocar el ícono del dado y confundía; en 2.0 se arma la tirada y se confirma con "Roll". | Tocar un dado lo **suma**; tirar es siempre LANZAR. |
-| 6 | **La selección de dados, en una fila al alcance del pulgar** | Dicenomicon y Dice by PCalc: barra inferior de tipos de dado; tocar tres veces "d6" = 3d6. | **Carrusel de dados** sobre los botones, con el **mismo dado 3D** de la solapa y de la mesa (lo que se elige es lo que cae): tocar suma uno, mantener quita uno (con "Deshacer"), contador dorado en cada tipo. |
-| 7 | **El resultado, grande y sobre el gráfico** | El zoom de cámara ya pone el foco en los dados; la suma debe aparecer ahí, no en otra parte de la pantalla. | Marcador grande arriba con el color del veredicto; toma cenital de los dados. En el carrusel, **el número ocupa el lugar del dado**: una ficha grande por dado, en el color de su skin, agrupadas bajo el nombre del tipo cuando hay varios; borde dorado en las que deciden el resultado. |
+| 6 | **La selección de dados, en una fila al alcance del pulgar** | Dicenomicon y Dice by PCalc: barra inferior de tipos de dado; tocar tres veces "d6" = 3d6. | **Carrusel de dados** sobre los botones, con el **mismo dado 3D** de la solapa y de la mesa (lo que se elige es lo que cae): tocar suma uno, mantener quita uno (con "Deshacer"), contador dorado en cada tipo. **Los dados que están en la mesa van primero**; el orden sólo cambia cuando nadie está tocando (al cambiar de sistema y al empezar o terminar una tirada), para que un segundo toque nunca caiga en otro dado. |
+| 7 | **El resultado, grande y sobre el gráfico** | El zoom de cámara ya pone el foco en los dados; la suma debe aparecer ahí, no en otra parte de la pantalla. | Marcador arriba, sobre una placa oscura: **el número grande y en marfil**, y el veredicto debajo como etiqueta en su color (principio 19); toma cenital de los dados. En el carrusel, **el número ocupa el lugar del dado**: una ficha grande por dado, en el color de su skin, agrupadas bajo el nombre del tipo cuando hay varios; borde dorado en las que deciden el resultado. |
 | 8 | **Una física espectacular tiene que poder acortarse** | Usuarios de D&D Beyond piden que los dados no "reboten como gomitas 3 segundos". | **Tocar la mesa mientras ruedan los dados adelanta la tirada hasta el final**, sin sonido. El marcador lo avisa. |
-| 9 | **Opciones de baja frecuencia, fuera de la vista principal** | Escenarios, modo de decisión, sonido: se cambian poco y no merecen espacio permanente. | Escenario en un menú de la barra superior; modo, superficie, sonido y pantalla en la hoja de Ajustes. |
+| 9 | **Opciones de baja frecuencia, fuera de la vista principal** | Escenarios, modo de decisión, sonido: se cambian poco y no merecen espacio permanente. | Escenario en un menú de la barra superior; superficie, sonido y pantalla en la hoja de Ajustes, que abre con lo que se toca en la mesa (Discord, zurdos, agitar) y deja el modo de decisión al final, como "Avanzado". |
 | 10 | **Hojas inferiores para lo secundario** | Material 3 y NN/g: hojas cortas, que se cierran con un control visible y con "Atrás", sin apilarlas. | Sistema, Tirada, Historial y Ajustes son hojas inferiores; se cierran deslizando, tocando afuera o con "Atrás". |
-| 11 | **Ergonomía para cada mano** | Dos tercios de los agarres a una mano son con la derecha, pero no todos. La comunidad de Balatro móvil pidió modo zurdo/diestro. | **Controles para zurdos** en Ajustes: "Tirada" y "Dados" cambian de lado; LANZAR queda al centro. |
+| 11 | **Ergonomía para cada mano** | Dos tercios de los agarres a una mano son con la derecha, pero no todos. La comunidad de Balatro móvil pidió modo zurdo/diestro. | **Controles para zurdos** en Ajustes: "Tirada" y "Dados" cambian de lado y **la solapa de dados sale del mismo lado que su botón**; LANZAR queda al centro. En Ajustes, toda la fila de cada opción es el interruptor. |
 | 12 | **Ayuda que se retira sola** | Un texto de ayuda permanente consume altura y sólo sirve la primera vez. | El marcador enseña los gestos en las tres primeras tiradas y después muestra la notación ("2d6 + 4"). |
 | 13 | **Objetivos táctiles ≥ 48 dp** | Material: 48 × 48 dp con 8 dp de separación (Apple: 44 pt). | Botones inferiores de 64 dp, píldoras de 48 dp, fichas del carrusel de 58 × 56 dp con 8 dp entre sí. |
 | 14 | **Un mismo gesto hace lo mismo en todas partes** | La coherencia hace que un gesto aprendido sirva en toda la app (heurística de consistencia de Nielsen). | Mantener apretado un dado lo quita, tanto en el carrusel como **sobre la mesa 3D**, y siempre se puede deshacer. |
-| 15 | **Lo más importante nunca se recorta** | En una fila con poco espacio, el elemento que define el contexto (el sistema de juego) tiene que leerse entero. | El escenario usa un nombre corto y tiene un ancho máximo; el sistema de juego toma el resto. |
+| 15 | **Lo más importante nunca se recorta** | En una fila con poco espacio, el elemento que define el contexto (el sistema de juego) tiene que leerse entero. | Cada sistema tiene un **nombre corto** de hasta 18 letras ("D&D 5e (d20)") para la barra superior; en pantallas de menos de 380 dp el escenario queda sólo con su ícono. Los botones de los costados de LANZAR no llevan frases: el modificador en grande y el objetivo en corto ("CD 15"), y la cantidad de dados como insignia. Un test cuida los largos. |
 | 16 | **El resaltado pertenece al ambiente** | Un amarillo fijo encima de cada escena se siente pegado; el color de acento debe salir de la luz de la escena para que el resalte se lea sin romper la armonía. | El contorno de los dados que deciden la tirada, los bordes del carrusel y los contadores usan el **acento del ambiente**: ámbar de vela (taberna), lavanda de antorcha (castillo), turquesa (cuero), crema o ámbar suave (bandeja). |
 | 17 | **Los dados contrastan con su escena y entre sí** | Si todos los dados comparten gama (azules, verdes, violetas) cuesta distinguirlos y se pierden contra fondos de esa gama. | La skin "Por tipo" usa una **paleta por ambiente**: ocho colores bien distintos que evitan los tonos dominantes de esa escena. Un test exige distancia mínima entre colores y números legibles en los cinco ambientes. |
 | 18 | **Accesible sin mirar** | TalkBack debe poder leer el resultado y cada control. | Marcador como región "viva"; cada ficha del carrusel dice "d6, 2 en la mesa, salió 3, 4. Tocá para agregar, mantené para quitar"; voz opcional. |
+| 19 | **El número manda, y se lee sobre cualquier escena** | En la mesa lo que se dice en voz alta es el total; "Éxito" depende de una dificultad que muchas veces sólo conoce quien dirige. Y un color saturado sobre una escena 3D puede no tener contraste: "Fallo" en rojo se midió en 1,15:1 sobre la piedra del castillo (el mínimo para texto grande es 3:1). | El total va en 40 sp y en marfil sobre una placa oscura; el veredicto, debajo, en versiones claras de su color (rojo `#FF6B6B`, violeta `#CE93D8`). Medido después: "Fallo" a 5,8:1. En D&D **la CD es opcional**: sin CD se muestra sólo el total. |
+| 20 | **Lo que se repite, a un toque del pulgar** | Owlbear Rodeo 2.0: "Recientes" es el atajo que más fricción ahorra. En una partida se alternan dos o tres tiradas (ataque, daño, salvación). | **Fila de atajos** sobre los dados: Historial, las tiradas guardadas y las dos últimas tiradas distintas de la que está en la mesa. Tocar una la lanza. Antes, lanzar una guardada eran 3 toques y el primero estaba al 9 % de la altura. |
+| 21 | **Lo que se borra de un toque se puede deshacer** | Material: acción + "Deshacer" en vez de un diálogo de confirmación. | Quitar un dado, borrar el historial y borrar una tirada guardada ofrecen "Deshacer" (en las hojas, dentro de la hoja misma: los avisos de la pantalla quedan tapados). |
+| 22 | **Los números se cambian con pocos toques** | Un modificador de +7 de a un paso son siete toques. | En la hoja "Tirada", modificador y objetivo se mueven de a 1 y de a 5, con botones de 48 dp. Ventaja y desventaja se llaman igual que en el menú de LANZAR y hacen lo mismo. |
+| 23 | **Toda la interfaz en una sola paleta** | Material rellena con su violeta de fábrica cada rol de color que la app no define. | El esquema oscuro define todos los roles: chips, botones tonales, segmentos, menús, interruptores y avisos salen en la gama azul noche de la app. |
 
 ## 2. Diagnóstico de la versión anterior y estado actual
 
@@ -47,6 +52,27 @@
 | Tocar una ficha de dado no hacía nada | Media | **Resuelto**: tocar suma, mantener quita. |
 | No se podía saltar la animación | Media | **Resuelto**: tocar la mesa adelanta la tirada. |
 | Con una torre elegida, el nombre del sistema de juego quedaba reducido a ".." (detectado al probar) | Media | **Resuelto**: el escenario muestra un nombre corto ("Castillo") con tope de ancho, sin flechas; TalkBack lee los nombres completos. |
+
+### Auditoría en un teléfono angosto (noviembre de 2026)
+
+Hecha sobre un Realme de **320 × 715 dp**, midiendo cada control con `uiautomator` y el contraste en
+las capturas (bitácora, capítulos 19 y 20).
+
+| Problema medido | Estado |
+|---|---|
+| "Fallo" y "¡1 natural!" con contraste insuficiente (1,15:1 sobre la piedra; 2,7:1 sobre el fondo liso) | **Resuelto**: placa oscura y colores claros; 5,8:1 medido. |
+| En d20 el título era "Fallo" y el total quedaba en 13 sp; la CD arrancaba siempre en 15 | **Resuelto**: el total manda; la CD es opcional y arranca vacía. |
+| Entraban 4,75 fichas y el d20 quedaba fuera de la fila | **Resuelto**: los dados de la mesa van primero. |
+| Cuatro textos cortados ("Sum…", "d20 c…", "+0 · CD…", "Dados ·…") | **Resuelto**: nombres cortos, escenario como ícono, insignia para la cantidad. |
+| Historial y guardadas al 9 % de la altura; lanzar una guardada, 3 toques | **Resuelto**: fila de atajos en la franja del pulgar. |
+| Modificador de a 1; "Mayor/Menor" en la hoja y "ventaja/desventaja" en LANZAR | **Resuelto**: pasos de 1 y de 5; mismas palabras y mismo efecto. |
+| "Borrar historial" y la ✕ de una guardada, sin vuelta atrás | **Resuelto**: "Deshacer" dentro de la hoja. |
+| Chips, segmentos y menús en el gris violáceo de fábrica | **Resuelto**: esquema de colores completo. |
+| La solapa de dados abría siempre desde la derecha; las skins, al 11 % de la altura | **Resuelto** de otra forma que la propuesta: sigue siendo lateral (deja ver la mesa mientras se agregan dados, cosa que una hoja inferior taparía), pero sale del lado de su botón y las skins quedan fijas abajo. |
+| Ajustes abría con la explicación técnica del modo de decisión | **Resuelto**: va al final; toda la fila de cada opción es el interruptor. |
+| La mesa se encuadraba 36 dp más arriba de lo libre en teléfonos con recorte de cámara | **Resuelto**: las barras se miden con los márgenes del sistema. |
+| Al abrir una hoja en modo inmersivo reaparece la barra de estado | Pendiente. |
+| El desglose del marcador no sigue el orden de las fichas del carrusel | Pendiente. |
 
 ## 3. Patrones de referencia (resumen)
 
@@ -67,12 +93,16 @@
 - [ ] Con TalkBack: recorrer el carrusel, lanzar y escuchar el veredicto.
 - [ ] Teléfono con recorte de cámara: nada importante queda debajo del recorte.
 - [ ] Tocar la mesa durante una tirada de 20 dados en una torre: el resultado aparece casi al instante.
+- [ ] En un teléfono angosto (o con el tamaño de pantalla al máximo): ningún texto cortado en la barra
+      superior ni en los botones de abajo; el dado en uso, primero en la fila.
+- [ ] En un teléfono ancho (el A33): la barra superior muestra el nombre del escenario y los atajos no
+      quedan apretados. **No se probó después de los cambios de noviembre.**
+- [ ] Alternar ataque y daño sólo con los atajos, sin abrir ninguna hoja.
 
 ## 5. Ideas de UX todavía no implementadas
 
 | Idea | De dónde |
 |---|---|
-| Hoja inferior con "peek" de **tiradas recientes** visible sobre la franja inferior (alternar ataque y daño de un toque) | Owlbear Rodeo 2.0: "Recientes" es el atajo que más fricción ahorra |
 | Chip de "último resultado" junto a LANZAR al volver a la vista general; tocarlo abre el historial | Informe, propuesta de layout |
 | Elegir escenario con miniaturas grandes en una hoja "Mesa", o deslizando dentro de la mesa | Informe, propuesta de layout |
 | Relanzar un dado concreto deslizándolo con el dedo | Dice by PCalc (flick) |

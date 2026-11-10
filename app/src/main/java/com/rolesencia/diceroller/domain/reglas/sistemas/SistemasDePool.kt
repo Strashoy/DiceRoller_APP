@@ -22,6 +22,7 @@ import com.rolesencia.diceroller.domain.reglas.pool
 object ForgedInTheDark : SistemaReglas {
     override val id = "fitd"
     override val nombre = "Forged in the Dark (Blades)"
+    override val nombreCorto = "Blades (FitD)"
     override val descripcion = "Pool de d6, cuenta el más alto. 1–3: fallo. 4–5: éxito parcial. 6: éxito. " +
         "Dos 6: crítico. Con 0 dados: lanzar 2 y elegir Menor."
 
@@ -59,6 +60,7 @@ object ForgedInTheDark : SistemaReglas {
 class ConteoExitos(
     override val id: String,
     override val nombre: String,
+    override val nombreCorto: String = nombre,
     private val tipo: TipoDado = TipoDado.D10,
     private val umbral: Int,
     private val unosRestan: Boolean = false,
@@ -75,7 +77,7 @@ class ConteoExitos(
         if (explotaCon != null) append(" Los $explotaCon+ se vuelven a lanzar.")
         if (excepcional != null) append(" $excepcional+ éxitos: excepcional.")
     }
-    override val campoObjetivo = CampoParametro("Éxitos necesarios", 1..10, 1)
+    override val campoObjetivo = CampoParametro("Éxitos necesarios", 1..10, 1, etiquetaCorta = "Éxitos")
 
     override fun tiradaSugerida() = pool { agregar(tipo, dadosIniciales) }
 
@@ -110,6 +112,7 @@ class ConteoExitos(
 class Shadowrun(private val reglaDelSeis: Boolean = false) : SistemaReglas {
     override val id = if (reglaDelSeis) "shadowrun_edge" else "shadowrun"
     override val nombre = if (reglaDelSeis) "Shadowrun (con Edge)" else "Shadowrun"
+    override val nombreCorto = if (reglaDelSeis) "Shadowrun + Edge" else "Shadowrun"
     override val descripcion = "Pool de d6: cada 5 o 6 es un hit. Si más de la mitad son 1: glitch. " +
         "Glitch sin hits: glitch crítico." + if (reglaDelSeis) " Regla del Seis: los 6 se vuelven a lanzar." else ""
     override val campoObjetivo = CampoParametro("Umbral", 1..10, 2)
@@ -147,10 +150,11 @@ class Shadowrun(private val reglaDelSeis: Boolean = false) : SistemaReglas {
 object VampiroV5 : SistemaReglas {
     override val id = "v5"
     override val nombre = "Vampiro V5 (Hambre)"
+    override val nombreCorto = "Vampiro V5"
     override val descripcion = "Pool de d10: 6+ es éxito. Cada par de 10 vale 4 éxitos (crítico). " +
         "Los dados especiales son de Hambre: crítico con un 10 de Hambre = caótico; " +
         "fallo con un 1 de Hambre = bestial."
-    override val campoObjetivo = CampoParametro("Dificultad", 1..10, 3)
+    override val campoObjetivo = CampoParametro("Dificultad", 1..10, 3, etiquetaCorta = "Dif.")
 
     override fun tiradaSugerida() = pool {
         agregar(TipoDado.D10, 4)
