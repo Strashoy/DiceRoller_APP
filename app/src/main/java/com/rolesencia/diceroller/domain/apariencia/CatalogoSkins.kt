@@ -30,7 +30,7 @@ object CatalogoSkins {
      */
     fun colorPorTipo(tipo: TipoDado): Long = PaletasAmbiente.porTipo(ambienteActivo, tipo)
 
-    val POR_TIPO = SkinDado("por_tipo", "Por tipo", CategoriaSkin.POR_TIPO, cuerpo = null, tinta = BLANCO)
+    val POR_TIPO = SkinDado("por_tipo", "Un color por tipo", CategoriaSkin.POR_TIPO, cuerpo = null, tinta = BLANCO)
 
     private fun s(id: String, nombre: String, categoria: CategoriaSkin, cuerpo: Long, tinta: Long, borde: Long? = null) =
         SkinDado(id, nombre, categoria, cuerpo, tinta, borde)

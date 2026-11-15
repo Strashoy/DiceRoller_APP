@@ -224,6 +224,7 @@ fun SolapaDados(
                     especial = especial,
                     skinsDelSistema = skinsDelSistema,
                     habilitado = habilitado,
+                    dadosEnMesa = pool.size,
                     onElegir = onElegirSkin,
                     onToggleEspecial = onToggleEspecial,
                     onToggleSkinsDelSistema = onToggleSkinsDelSistema,

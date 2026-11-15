@@ -56,6 +56,7 @@ data class PreferenciasGuardadas(
     val agitarHabilitado: Boolean = true,
     val manoIzquierda: Boolean = false,
     val pistasQuitar: Int = 0,
+    val historialDescubierto: Boolean = false,
     // Se leen junto con el resto pero se guardan aparte (guardarHistorial / guardarTiradas):
     // así cambiar un ajuste no reescribe 50 tiradas.
     val historial: List<EntradaHistorial> = emptyList(),
@@ -84,6 +85,7 @@ class GestorPreferencias(private val context: Context) {
         val AGITAR = booleanPreferencesKey("agitar_habilitado")
         val ZURDO = booleanPreferencesKey("mano_izquierda")
         val PISTAS_QUITAR = intPreferencesKey("pistas_quitar")
+        val HISTORIAL_DESCUBIERTO = booleanPreferencesKey("historial_descubierto")
         val HISTORIAL = stringPreferencesKey("historial")
         val TIRADAS = stringPreferencesKey("tiradas_guardadas")
         const val SIN_OBJETIVO = Int.MIN_VALUE
@@ -117,6 +119,7 @@ class GestorPreferencias(private val context: Context) {
                 agitarHabilitado = p[AGITAR] ?: true,
                 manoIzquierda = p[ZURDO] ?: false,
                 pistasQuitar = p[PISTAS_QUITAR] ?: 0,
+                historialDescubierto = p[HISTORIAL_DESCUBIERTO] ?: false,
                 historial = decodificarHistorial(p[HISTORIAL].orEmpty(), decodificarSkins(p[SKINS].orEmpty())),
                 tiradasGuardadas = decodificarTiradas(p[TIRADAS].orEmpty(), decodificarSkins(p[SKINS].orEmpty()))
             )
@@ -143,6 +146,7 @@ class GestorPreferencias(private val context: Context) {
             p[AGITAR] = prefs.agitarHabilitado
             p[ZURDO] = prefs.manoIzquierda
             p[PISTAS_QUITAR] = prefs.pistasQuitar
+            p[HISTORIAL_DESCUBIERTO] = prefs.historialDescubierto
         }
     }
 

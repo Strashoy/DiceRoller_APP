@@ -3,7 +3,7 @@ package com.rolesencia.diceroller.domain.apariencia
 import com.rolesencia.diceroller.domain.dados.TipoDado
 
 enum class CategoriaSkin(val titulo: String) {
-    POR_TIPO("Por tipo"),
+    POR_TIPO("Un color por tipo de dado"),
     CLASICOS("Colores clásicos"),
     ESPECIALES("Efectos"),
     GEMAS("Gemas"),

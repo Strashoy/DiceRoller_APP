@@ -103,6 +103,8 @@ import com.rolesencia.diceroller.tirada.torre.ModelosTorre
 import com.rolesencia.diceroller.ui.components.CarruselDados
 import com.rolesencia.diceroller.ui.components.HojaAjustes
 import com.rolesencia.diceroller.ui.components.HojaHistorial
+import com.rolesencia.diceroller.domain.historial.IndicioHistorial
+import com.rolesencia.diceroller.domain.historial.NombreGuardada
 import com.rolesencia.diceroller.ui.components.HojaParametros
 import com.rolesencia.diceroller.ui.components.SelectorSistema
 import com.rolesencia.diceroller.ui.components.SolapaDados
@@ -320,7 +322,9 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
                     Atajos.recientes(state.historial, state.tiradasGuardadas, state.sistema.id, state.pool, state.parametros)
                 },
                 habilitado = !ocupado,
-                onHistorial = { pestanaHistorial = 0; hoja = Hoja.HISTORIAL },
+                onHistorial = { pestanaHistorial = 0; hoja = Hoja.HISTORIAL; viewModel.marcarHistorialDescubierto() },
+                tiradasEnHistorial = state.historial.size,
+                resaltarHistorial = IndicioHistorial.resaltar(state.historialDescubierto, state.historial.size),
                 onGuardar = { pestanaHistorial = 1; hoja = Hoja.HISTORIAL },
                 onLanzarGuardada = { FeedbackTactil.clickBoton(vista); viewModel.lanzarGuardada(it) },
                 onRepetir = { FeedbackTactil.clickBoton(vista); viewModel.repetir(it) },
@@ -452,6 +456,9 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
             historial = state.historial,
             guardadas = state.tiradasGuardadas,
             notacionActual = Notacion.de(state.pool, if (state.sistema.usaModificador) state.parametros.modificador else 0),
+            nombreSugerido = NombreGuardada.sugerido(
+                state.pool, Notacion.de(state.pool, if (state.sistema.usaModificador) state.parametros.modificador else 0), state.tiradasGuardadas
+            ),
             habilitado = !ocupado,
             pendientesDiscord = state.estadoDiscord.pendientes,
             pestanaInicial = pestanaHistorial,

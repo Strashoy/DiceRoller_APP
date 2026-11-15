@@ -104,6 +104,8 @@ fun SelectorSkin(
     especial: Boolean,
     skinsDelSistema: Boolean,
     habilitado: Boolean,
+    /** Cuántos dados hay en la mesa (para "Todos los dados"). */
+    dadosEnMesa: Int,
     onElegir: (SkinDado) -> Unit,
     onToggleEspecial: () -> Unit,
     onToggleSkinsDelSistema: () -> Unit,
@@ -130,13 +132,22 @@ fun SelectorSkin(
         }
 
         DropdownMenu(expanded = abierto, onDismissRequest = { abierto = false }) {
+            // Lo que más se buscaba y no se encontraba: cambiar el color de TODOS los dados. Va primero,
+            // con la muestra del color que se va a aplicar.
+            DropdownMenuItem(
+                leadingIcon = { MuestraSkin(skinActual, 32.dp) },
+                text = {
+                    Column {
+                        Text("Todos los dados", color = DoradoLegendario, fontWeight = FontWeight.Bold)
+                        Text(textoTodosLosDados(dadosEnMesa, skinActual.nombre), fontSize = 11.sp, color = Ivory.copy(alpha = 0.7f))
+                    }
+                },
+                enabled = dadosEnMesa > 0,
+                onClick = { abierto = false; onAplicarATodos() }
+            )
             DropdownMenuItem(
                 text = { Text("✦ Crear skin…", color = DoradoLegendario, fontWeight = FontWeight.Bold) },
                 onClick = { abierto = false; onCrear() }
-            )
-            DropdownMenuItem(
-                text = { Text("Pintar los dados de la mesa") },
-                onClick = { abierto = false; onAplicarATodos() }
             )
             DropdownMenuItem(
                 text = {
@@ -172,6 +183,11 @@ fun SelectorSkin(
                 CategoriaSkin.TEMATICOS to CatalogoSkins.tematicos,
                 CategoriaSkin.SISTEMA to CatalogoSkins.porSistema
             )
+            Text(
+                "Elegí el color para los dados nuevos",
+                fontSize = 11.sp, color = Ivory.copy(alpha = 0.6f),
+                modifier = Modifier.padding(start = 16.dp, top = 8.dp)
+            )
             grupos.filter { it.second.isNotEmpty() }.forEach { (categoria, skins) ->
                 HorizontalDivider()
                 Text(
@@ -205,4 +221,11 @@ fun SelectorSkin(
             }
         }
     }
+}
+
+/** Qué hace "Todos los dados": con cuántos dados y con qué color (o por qué no se puede todavía). */
+internal fun textoTodosLosDados(dadosEnMesa: Int, nombreSkin: String): String = when (dadosEnMesa) {
+    0 -> "Agregá dados a la mesa primero"
+    1 -> "Pintar el dado de la mesa con «$nombreSkin»"
+    else -> "Pintar los $dadosEnMesa dados de la mesa con «$nombreSkin»"
 }

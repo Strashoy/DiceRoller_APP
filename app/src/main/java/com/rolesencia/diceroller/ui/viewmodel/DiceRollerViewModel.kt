@@ -134,6 +134,7 @@ class DiceRollerViewModel(
                     agitarHabilitado = prefs.agitarHabilitado,
                     manoIzquierda = prefs.manoIzquierda,
                     pistasQuitar = prefs.pistasQuitar,
+                    historialDescubierto = prefs.historialDescubierto,
                     historial = prefs.historial,
                     tiradasGuardadas = prefs.tiradasGuardadas
                 )
@@ -170,7 +171,8 @@ class DiceRollerViewModel(
                     vozHabilitada = s.vozHabilitada,
                     agitarHabilitado = s.agitarHabilitado,
                     manoIzquierda = s.manoIzquierda,
-                    pistasQuitar = s.pistasQuitar
+                    pistasQuitar = s.pistasQuitar,
+                    historialDescubierto = s.historialDescubierto
                 )
             )
         }
@@ -575,6 +577,13 @@ class DiceRollerViewModel(
         mensajeEnEspera = null
         if (mensaje != null && publicar) publicador.publicar(mensaje)
         _uiState.update { if (it.fotoPedida != null) it.copy(fotoPedida = null) else it }
+    }
+
+    /** Se abrió el historial: el chip deja de resaltarse (y no vuelve a hacerlo). */
+    fun marcarHistorialDescubierto() {
+        if (_uiState.value.historialDescubierto) return
+        _uiState.update { it.copy(historialDescubierto = true) }
+        guardar()
     }
 
     /** Guarda la mesa actual con un nombre; si el nombre ya existe, la reemplaza. */

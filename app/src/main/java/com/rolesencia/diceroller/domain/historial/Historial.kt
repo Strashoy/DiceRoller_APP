@@ -157,5 +157,39 @@ object Atajos {
     }
 }
 
+/**
+ * Nombre que se propone al guardar la mesa: la notación ("2d6 + 1d4"), para guardar con un toque en
+ * el caso común. Si ya hay una guardada con ese nombre se le agrega " (2)", " (3)"…: guardar nunca
+ * pisa otra sin querer.
+ */
+object NombreGuardada {
+    const val MAX = 40
+
+    fun sugerido(pool: List<DadoEnMesa>, notacion: String, existentes: List<TiradaGuardada>): String {
+        if (pool.isEmpty()) return ""   // "Sin dados" no es un nombre
+        val base = notacion.take(MAX)
+        val usados = existentes.map { it.nombre.lowercase() }.toSet()
+        if (base.lowercase() !in usados) return base
+        var n = 2
+        while (true) {
+            val sufijo = " ($n)"
+            val candidato = base.take(MAX - sufijo.length) + sufijo
+            if (candidato.lowercase() !in usados) return candidato
+            n++
+        }
+    }
+}
+
+/**
+ * El chip "Historial": muestra cuántas tiradas hay y, hasta que la persona lo abre por primera vez,
+ * se resalta para que descubra que ahí queda todo (en las pruebas nadie lo notó solo).
+ */
+object IndicioHistorial {
+    fun resaltar(descubierto: Boolean, tiradas: Int): Boolean = !descubierto && tiradas > 0
+
+    /** Número del contador; sin tiradas no se muestra. */
+    fun contador(tiradas: Int): String? = if (tiradas > 0) tiradas.coerceAtMost(MAX_HISTORIAL).toString() else null
+}
+
 /** Límite del historial: alcanza para una sesión larga sin crecer sin fin en DataStore. */
 const val MAX_HISTORIAL = 50

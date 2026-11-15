@@ -1,5 +1,28 @@
 package com.rolesencia.diceroller.ui.components
 
+import android.widget.Toast
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.sp
+import com.rolesencia.diceroller.domain.historial.IndicioHistorial
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -46,6 +69,10 @@ fun FilaAtajos(
     recientes: List<EntradaHistorial>,
     habilitado: Boolean,
     onHistorial: () -> Unit,
+    /** Cuántas tiradas hay en el historial (el contador del chip). */
+    tiradasEnHistorial: Int,
+    /** La persona todavía no abrió el historial: el chip se resalta hasta que lo haga. */
+    resaltarHistorial: Boolean,
     onGuardar: () -> Unit,
     onLanzarGuardada: (TiradaGuardada) -> Unit,
     onRepetir: (EntradaHistorial) -> Unit,
@@ -67,26 +94,43 @@ fun FilaAtajos(
         verticalAlignment = Alignment.CenterVertically
     ) {
         item(key = "historial") {
+            val contador = IndicioHistorial.contador(tiradasEnHistorial)
+            // Mientras no lo abrió, el contador late y el borde toma el acento: "acá queda todo".
+            val latido by rememberInfiniteTransition(label = "latidoHistorial").animateFloat(
+                initialValue = 1f, targetValue = 0.35f,
+                animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "latido"
+            )
             AssistChip(
                 onClick = onHistorial,
                 enabled = habilitado,
-                label = { Text("Historial", fontWeight = FontWeight.SemiBold) },
+                label = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Historial", fontWeight = FontWeight.SemiBold)
+                        if (contador != null) {
+                            Box(
+                                Modifier
+                                    .padding(start = 8.dp)
+                                    .defaultMinSize(minWidth = 20.dp, minHeight = 20.dp)
+                                    .alpha(if (resaltarHistorial && habilitado) latido else 1f)
+                                    .background(acento, CircleShape)
+                                    .padding(horizontal = 5.dp),
+                                contentAlignment = Alignment.Center
+                            ) { Text(contador, color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                        }
+                    }
+                },
                 leadingIcon = { Icon(painterResource(R.drawable.ic_historial), contentDescription = null, modifier = Modifier.size(18.dp)) },
                 colors = colores,
-                border = AssistChipDefaults.assistChipBorder(habilitado, borderColor = Ivory.copy(alpha = 0.25f)),
-                modifier = Modifier.semantics { contentDescription = "Historial y tiradas guardadas" }
+                border = if (resaltarHistorial) AssistChipDefaults.assistChipBorder(habilitado, borderColor = acento, borderWidth = 2.dp)
+                else AssistChipDefaults.assistChipBorder(habilitado, borderColor = Ivory.copy(alpha = 0.25f)),
+                modifier = Modifier.semantics {
+                    contentDescription = "Historial y tiradas guardadas" + (if (contador != null) ", $contador tiradas" else "")
+                }
             )
         }
         // Las guardadas llevan el borde del acento del ambiente: son "las mías".
         items(guardadas, key = { "g:" + it.nombre }) { tirada ->
-            AssistChip(
-                onClick = { onLanzarGuardada(tirada) },
-                enabled = habilitado,
-                label = { Text(tirada.nombre, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold) },
-                colors = colores,
-                border = AssistChipDefaults.assistChipBorder(habilitado, borderColor = acento.copy(alpha = 0.7f)),
-                modifier = Modifier.widthIn(max = 168.dp).semantics { contentDescription = "Lanzar ${tirada.nombre}" }
-            )
+            ChipGuardada(tirada.nombre, habilitado, acento, onClick = { onLanzarGuardada(tirada) })
         }
         items(recientes, key = { "r:" + it.instante }) { entrada ->
             AssistChip(
@@ -116,3 +160,33 @@ fun FilaAtajos(
 
 /** Alto de la fila: 48 dp de zona táctil, aunque el atajo se vea de 32. */
 private val ALTO_ATAJOS = 48.dp
+
+/**
+ * Atajo de una tirada guardada. El nombre cabe en hasta ~28 letras; si aun así se corta, mantenerlo
+ * apretado lo muestra completo (un chip de Material no tiene toque largo, por eso es propio).
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ChipGuardada(nombre: String, habilitado: Boolean, acento: Color, onClick: () -> Unit) {
+    val contexto = LocalContext.current
+    val tinta = if (habilitado) Ivory else Ivory.copy(alpha = 0.45f)
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = Color.Black.copy(alpha = if (habilitado) 0.5f else 0.3f),
+        border = BorderStroke(1.dp, acento.copy(alpha = if (habilitado) 0.7f else 0.25f)),
+        modifier = Modifier
+            .widthIn(max = 232.dp)
+            .minimumInteractiveComponentSize()   // 48 dp de zona táctil, como los demás chips
+            .height(32.dp)
+            .semantics { contentDescription = "Lanzar $nombre" }
+            .combinedClickable(
+                enabled = habilitado,
+                onClick = onClick,
+                onLongClick = { Toast.makeText(contexto, nombre, Toast.LENGTH_SHORT).show() }
+            )
+    ) {
+        Box(Modifier.padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
+            Text(nombre, color = tinta, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+        }
+    }
+}

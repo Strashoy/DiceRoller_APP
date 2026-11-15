@@ -1076,6 +1076,67 @@ tapan la mesa (N2 y N3).
 
 ---
 
+## Capítulo 25 · Descubrir y guardar sin esfuerzo (Fase 2 del plan de testeos)
+
+**El pedido.** La Fase 2 del plan pedía "descubrimiento y claridad": cinco cosas que los testers no
+encontraban o hacían con demasiado esfuerzo. **N5**: cambiar el color de todos los dados tardó 30 s y
+55 s en los dos videos. **A1**: el historial no se descubre solo. **A2**: escribir el nombre al guardar
+llevó unos 20 s. **N6**: el nombre guardado se corta en el chip. **N7**: con el teclado abierto la hoja
+de Guardadas queda corta. (N4, N2 y N3 son de la Fase 1 y no se tocaron acá.)
+
+**La solución.**
+- **N5.** La opción ya existía, pero se llamaba "Pintar los dados de la mesa" y era el segundo renglón
+  de un menú larguísimo. Ahora es el **primero**, se llama "Todos los dados", lleva la muestra del color
+  que se va a aplicar y dice qué hará ("Pintar los 5 dados de la mesa con «Rojo»"); con la mesa vacía
+  está apagado y explica por qué ("Agregá dados a la mesa primero"). Arriba de la lista de colores hay
+  una línea que aclara que ese color es "para los dados nuevos", y "Por tipo" pasó a "Un color por tipo
+  (de dado)". Un acceso directo desde la barra de la mesa se evaluó y **no se hizo**: la barra ya tiene
+  tres controles y el menú es el sitio donde la persona ya mira cuando piensa en "color".
+- **A1.** El chip Historial muestra un **contador** (hasta 50, el tope del historial). Mientras la
+  persona no lo abrió nunca, el borde toma el acento del ambiente y el contador late; al abrirlo se
+  guarda (DataStore, `historial_descubierto`) y no vuelve a resaltarse. No se usó un globo flotante
+  porque los avisos que tapan los dados son justo la queja N2/N3.
+- **A2.** El campo del nombre viene **prellenado con la notación** ("2d6 + 1d4") y "Guardar" ya está
+  habilitado: guardar es un toque. Si ya hay una guardada con ese nombre, propone "… (2)", "… (3)":
+  guardar no pisa otra sin querer. Al tocar el campo queda todo seleccionado, así escribir reemplaza.
+  Tras guardar, el campo se vacía y el ítem aparece en la lista.
+- **N6.** El atajo de una guardada admite hasta 232 dp (antes 168) y, si aun así se corta, **mantenerlo
+  apretado** muestra el nombre completo. Como un chip de Material no tiene toque largo, es un `Surface`
+  propio con `combinedClickable`, con la misma zona táctil de 48 dp.
+- **N7.** El contenido de la hoja lleva `imePadding()` y la lista `weight(1f, fill = false)`: con el
+  teclado abierto la hoja sube entera y la lista se achica en vez de quedar tapada.
+- La lógica que se puede probar sin Android quedó en Kotlin puro: `NombreGuardada.sugerido`,
+  `IndicioHistorial` (cuándo resaltar y el contador) y `textoTodosLosDados`.
+
+**Problemas y soluciones.**
+
+| Problema | Causa | Solución |
+|---|---|---|
+| No compilaba `weight` en la pestaña Guardadas | La función no estaba en un `ColumnScope` | Se declaró como extensión de `ColumnScope` |
+| Gradle no encontraba el SDK en el worktree | `local.properties` no se versiona | Se copió del repositorio principal (queda fuera del commit) |
+| Los scripts de adb fallaban con rutas | Git Bash convierte `/sdcard/...` en una ruta de Windows | `MSYS_NO_PATHCONV=1`, y `pull` a un nombre relativo |
+| Python no podía imprimir "↻" del volcado | Consola en cp1252 | `PYTHONIOENCODING=utf-8` |
+
+**Verificación.** 147 tests (8 nuevos: nombre propuesto, vacío, repetido sin importar mayúsculas, largo
+máximo, resaltado y contador del chip, y el texto de "Todos los dados"), todos en verde. En el Realme
+`98f28f4a`, con volcados de `uiautomator` y capturas recortadas: el chip mostró "Historial · 50" con
+borde de acento y, tras abrirlo, volvió al borde normal; el campo vino con la notación y un toque en
+"Guardar" creó la guardada; con el teclado abierto se vieron el campo y dos ítems de la lista (antes
+ninguno); "Todos los dados" pintó los 5 dados de rojo; el toque largo mostró el nombre completo. Cierres
+(`FATAL EXCEPTION`): 0. **No se probó** con una persona nueva (la meta de "color en menos de 10 s" y
+"guardar sin preguntar" es de la Fase 4), ni en teléfonos angostos o con TalkBack; el toque largo usa un
+`Toast`, que tapa un momento los dados.
+
+**Lo que aprendimos.** Muchas veces la función ya está y lo que falta es el **nombre y el lugar**: "Pintar
+los dados de la mesa" en el segundo renglón no se encontraba; "Todos los dados" primero, sí. Y un valor
+por defecto bueno (la notación como nombre) vale más que una pantalla más rápida.
+
+**De acá salió…** La Fase 3 (pulido: barra del sistema sobre LANZAR, motivo de LANZAR deshabilitado) y
+la Fase 4 (nueva ronda de pruebas para medir tiempos). Idea: un toque largo con un tooltip propio en vez
+de `Toast`.
+
+---
+
 ## Patrones que se repitieron
 
 1. **Imitar lo que haría una persona.** Verter de a poco, golpear la torre, empujar un dado montado,

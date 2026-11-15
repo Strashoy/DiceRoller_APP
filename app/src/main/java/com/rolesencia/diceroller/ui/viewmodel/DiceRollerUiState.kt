@@ -89,6 +89,8 @@ data class DiceRollerUiState(
     val manoIzquierda: Boolean = false,
     /** Veces que se mostró "cómo quitar un dado" (se muestra sólo las primeras). */
     val pistasQuitar: Int = 0,
+    /** La persona ya abrió el historial alguna vez: el chip deja de resaltarse. */
+    val historialDescubierto: Boolean = false,
 
     // Historial (más reciente primero) y tiradas frecuentes guardadas con nombre
     val historial: List<EntradaHistorial> = emptyList(),

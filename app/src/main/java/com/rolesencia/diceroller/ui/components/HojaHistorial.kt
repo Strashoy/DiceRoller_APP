@@ -6,10 +6,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import com.rolesencia.diceroller.domain.historial.NombreGuardada
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -68,6 +73,8 @@ fun HojaHistorial(
     historial: List<EntradaHistorial>,
     guardadas: List<TiradaGuardada>,
     notacionActual: String,
+    /** Nombre propuesto al guardar (la notación, sin repetir uno existente); vacío si la mesa no tiene dados. */
+    nombreSugerido: String,
     habilitado: Boolean,
     onRepetir: (EntradaHistorial) -> Boolean,
     onBorrarHistorial: () -> Unit,
@@ -94,6 +101,8 @@ fun HojaHistorial(
         sheetState = estadoHoja,
         containerColor = MaterialTheme.colorScheme.surfaceVariant
     ) {
+        // Con el teclado abierto la hoja sube entera y la lista se achica (en vez de quedar tapada).
+        Column(Modifier.imePadding()) {
         PrimaryTabRow(selectedTabIndex = pestana, containerColor = MaterialTheme.colorScheme.surfaceVariant) {
             Tab(pestana == 0, { pestana = 0 }, text = { Text("Historial") })
             Tab(pestana == 1, { pestana = 1 }, text = { Text("Guardadas · ${guardadas.size}") })
@@ -118,7 +127,7 @@ fun HojaHistorial(
                     }
                 }
                 PestanaGuardadas(
-                    guardadas, notacionActual, habilitado,
+                    guardadas, notacionActual, nombreSugerido, habilitado,
                     onLanzar = { if (onLanzarGuardada(it)) onCerrar() },
                     onGuardar = onGuardarActual,
                     onBorrar = { guardadaBorrada = it; onBorrarGuardada(it) },
@@ -126,6 +135,7 @@ fun HojaHistorial(
                     alEnfocarCampo = { alcance.launch { estadoHoja.expand() } }
                 )
             }
+        }
         }
     }
 }
@@ -199,28 +209,37 @@ private fun PestanaHistorial(
 }
 
 @Composable
-private fun PestanaGuardadas(
+private fun ColumnScope.PestanaGuardadas(
     guardadas: List<TiradaGuardada>,
     notacionActual: String,
+    nombreSugerido: String,
     habilitado: Boolean,
     onLanzar: (TiradaGuardada) -> Unit,
     onGuardar: (String) -> Unit,
     onBorrar: (TiradaGuardada) -> Unit,
     alEnfocarCampo: () -> Unit = {}
 ) {
-    var nombre by remember { mutableStateOf("") }
+    // Viene prellenado con la notación: en el caso común basta tocar "Guardar".
+    var campo by remember { mutableStateOf(TextFieldValue(nombreSugerido)) }
+    val nombre = campo.text
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
         Text("Guardar la mesa actual: $notacionActual", fontSize = 13.sp, color = Ivory.copy(alpha = 0.75f))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
-                value = nombre,
-                onValueChange = { nombre = it.take(40) },
+                value = campo,
+                onValueChange = { campo = if (it.text.length > NombreGuardada.MAX) campo else it },
                 placeholder = { Text("Ej.: Espada larga") },
                 singleLine = true,
-                modifier = Modifier.weight(1f).onFocusChanged { if (it.isFocused) alEnfocarCampo() }
+                modifier = Modifier.weight(1f).onFocusChanged {
+                    if (it.isFocused) {
+                        // Al tocar el campo queda todo seleccionado: escribir reemplaza el nombre propuesto.
+                        campo = campo.copy(selection = TextRange(0, campo.text.length))
+                        alEnfocarCampo()
+                    }
+                }
             )
             FilledTonalButton(
-                onClick = { onGuardar(nombre); nombre = "" },
+                onClick = { onGuardar(nombre); campo = TextFieldValue("") },
                 enabled = nombre.isNotBlank(),
                 modifier = Modifier.heightIn(min = 56.dp)
             ) { Text("Guardar") }
@@ -230,7 +249,8 @@ private fun PestanaGuardadas(
         Vacio("Sin tiradas guardadas", "Guardá las que repetís siempre: el ataque de tu espada, una tirada de daño, la de iniciativa.")
         return
     }
-    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 440.dp)) {
+    // weight(fill = false): con el teclado abierto la lista toma lo que sobra, no se corta.
+    LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false).heightIn(max = 440.dp)) {
         items(guardadas, key = { it.nombre }) { t ->
             Row(
                 Modifier
