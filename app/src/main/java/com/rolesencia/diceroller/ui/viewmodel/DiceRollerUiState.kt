@@ -143,6 +143,21 @@ enum class AvisoDiscord(val texto: String) {
 }
 
 /**
+ * La mesa está ocupada: ruedan los dados, se pre-simula la tirada o se espera la foto de Discord.
+ * Mientras dura, la interfaz entera se deshabilita salvo tocar la mesa (ver [interaccionHabilitada]).
+ * Así no hay toques que se pierdan en silencio (N1: "Otra vez" no hacía nada al tocarlo en pleno rodaje).
+ *
+ * La espera de la foto cuenta (si se abre una hoja y se tira de nuevo, la tirada sale sin imagen),
+ * pero la del GIF no: puede durar hasta 25 s y dejar la app muerta ese tiempo es peor.
+ */
+val DiceRollerUiState.mesaOcupada: Boolean
+    get() = estaRodando || preparando || (fotoPedida != null && !fotoAnimada)
+
+/** Todo lo que no sea tocar la mesa (lanzar, atajos, hojas, dados, ajustes) sólo responde con la mesa libre. */
+val DiceRollerUiState.interaccionHabilitada: Boolean
+    get() = !mesaOcupada
+
+/**
  * Qué mostrar junto al resultado: sale de la última tirada del historial, no de un estado aparte,
  * así nunca dice "enviada" sobre una tirada que no es la que está en pantalla.
  */

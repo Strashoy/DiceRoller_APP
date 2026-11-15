@@ -69,10 +69,11 @@ fun FilaAtajos(
         item(key = "historial") {
             AssistChip(
                 onClick = onHistorial,
+                enabled = habilitado,
                 label = { Text("Historial", fontWeight = FontWeight.SemiBold) },
                 leadingIcon = { Icon(painterResource(R.drawable.ic_historial), contentDescription = null, modifier = Modifier.size(18.dp)) },
                 colors = colores,
-                border = AssistChipDefaults.assistChipBorder(true, borderColor = Ivory.copy(alpha = 0.25f)),
+                border = AssistChipDefaults.assistChipBorder(habilitado, borderColor = Ivory.copy(alpha = 0.25f)),
                 modifier = Modifier.semantics { contentDescription = "Historial y tiradas guardadas" }
             )
         }
@@ -102,10 +103,11 @@ fun FilaAtajos(
             item(key = "guardar") {
                 AssistChip(
                     onClick = onGuardar,
+                    enabled = habilitado,
                     label = { Text("Guardar esta tirada") },
                     leadingIcon = { Text("+", color = Ivory) },
                     colors = colores,
-                    border = AssistChipDefaults.assistChipBorder(true, borderColor = Ivory.copy(alpha = 0.25f))
+                    border = AssistChipDefaults.assistChipBorder(habilitado, borderColor = Ivory.copy(alpha = 0.25f))
                 )
             }
         }

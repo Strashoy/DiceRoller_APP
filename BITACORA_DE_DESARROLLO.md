@@ -1025,6 +1025,57 @@ cualquier tamaño.
 
 ---
 
+## Capítulo 24 · La mesa ocupada no se toca (N1: "Otra vez" no hacía nada)
+
+**El pedido.** Dos videos de testeo con una persona mostraron que "Otra vez" fallaba. La Fase 0
+(investigación, sin tocar código) concluyó que no estaba roto: el toque caía mientras los dados
+rodaban y la app lo ignoraba en silencio. La Fase 1 pedía una regla única: **con la mesa ocupada
+(rodando, pre-simulando o sacando la foto) se bloquea toda la interfaz, salvo tocar la mesa**.
+
+**La solución.**
+- La condición vive en un solo lugar y se prueba sin Android: `mesaOcupada` e `interaccionHabilitada`,
+  dos propiedades de extensión sobre el estado de la pantalla. El ViewModel usa la misma para sus
+  guardas, así que pantalla y lógica no pueden discrepar.
+- La pantalla ya atenuaba varios controles, pero botón por botón y con huecos. Quedaban tocables el
+  botón de **Ajustes**, el atajo **Historial**, el atajo "Guardar esta tirada" y mantener apretado un
+  dado en la mesa (lo quitaba en pleno rodaje). Ahora todos obedecen la regla.
+- Los controles se atenúan al 40 % (antes 25 %) y vuelven con un fundido de 150 ms; para irse tardan
+  350 ms, como antes.
+- La espera de la **foto** de Discord cuenta como ocupado: si no, se podía abrir el Historial, tocar
+  "Otra vez" y la tirada anterior salía sin imagen. La espera del **GIF** no cuenta, porque puede
+  durar hasta 25 s y dejar la app muerta todo ese tiempo era peor.
+- `repetir` y `lanzarGuardada` ahora devuelven si la tirada arrancó, y la hoja del Historial sólo se
+  cierra si arrancó: ya no se cierra "contestando" a un toque que no hizo nada.
+- Un aviso con "Deshacer" se descarta cuando empieza un rodaje, para que no quede un botón tocable
+  que se perdería.
+
+**Problemas y soluciones.**
+
+| Problema | Causa | Solución |
+|---|---|---|
+| El carrusel de dados ocultaba los resultados durante la espera de la foto | Recibía `ocupado` como "está rodando"; al ampliar `ocupado` a la foto, dejaba de mostrar lo que salió | La pantalla separa `rodando` (dados en movimiento: rótulo "Rodando…", valores del carrusel) de `ocupado` (bloqueo) |
+| Un test no compilaba | El nombre en backticks llevaba `:` y la JVM no lo admite | Se reescribió el nombre |
+| Gradle no encontraba el SDK en el worktree | `local.properties` no se versiona y el worktree no lo trae | Se copió del repositorio principal (queda fuera del commit) |
+| El volcado de `uiautomator` no sirve para ver "deshabilitado" | Compose publica los botones con `enabled="true"` y `clickable="false"` aunque estén deshabilitados, y el volcado tarda más que el rodaje | Se verificó por comportamiento: tocar y ver si la hoja se abre |
+
+**Verificación.** 139 tests (7 nuevos en `MesaOcupadaTest`: reposo, rodando, pre-simulando, foto,
+GIF, rodando con GIF y vuelta a reposo), todos en verde. En el Realme `98f28f4a`: en un volcado
+tomado en plena tirada apareció "Rodando…" y, tras tocar el Historial y Ajustes a los 0,3 s, ninguna
+hoja se abrió; con la mesa libre, el mismo toque abre el Historial y Ajustes. También se tocaron 10
+veces seguidas el atajo de repetir y LANZAR, cada 0,25 s, sin cierres (`FATAL EXCEPTION`: 0 en toda
+la tanda). **No se probó** con Discord y foto reales, ni el caso de "Otra vez" desde la hoja del
+Historial en el instante exacto en que empieza un rodaje, ni otros teléfonos; tampoco se midió con
+una persona.
+
+**Lo que aprendimos.** Un toque que se pierde en silencio es peor que un botón deshabilitado: el
+usuario concluye que la app está rota. Cuando una regla ("ocupado") se aplica botón por botón, siempre
+queda alguno sin cubrir; conviene que la regla viva en un solo lugar y que la pantalla la consulte.
+
+**De acá salió…** El resto de la Fase 1: confirmar el guardado de una tirada (N4) y los textos que
+tapan la mesa (N2 y N3).
+
+---
+
 ## Patrones que se repitieron
 
 1. **Imitar lo que haría una persona.** Verter de a poco, golpear la torre, empujar un dado montado,

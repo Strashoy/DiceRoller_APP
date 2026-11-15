@@ -176,7 +176,7 @@ class DiceRollerViewModel(
         }
     }
 
-    private val ocupado: Boolean get() = _uiState.value.let { it.estaRodando || it.preparando }
+    private val ocupado: Boolean get() = _uiState.value.mesaOcupada
 
     /** Cambia la mesa, limpia resultados y vuelve a acomodar los dados; nada cambia mientras ruedan. */
     private fun editarMesa(cambio: (DiceRollerUiState) -> DiceRollerUiState) {
@@ -437,18 +437,20 @@ class DiceRollerViewModel(
     }
 
     /** "Otra vez": repite una tirada del historial tal cual (D&D Beyond, Roll20). */
-    fun repetir(entrada: EntradaHistorial) {
-        if (ocupado || entrada.pool.isEmpty()) return
+    fun repetir(entrada: EntradaHistorial): Boolean {
+        if (ocupado || entrada.pool.isEmpty()) return false
         cargar(entrada.sistemaId, entrada.pool, entrada.parametros)
         lanzar()
+        return true
     }
 
     /** Tocar una tirada guardada la carga y la lanza (presets de Dice by PCalc). */
-    fun lanzarGuardada(tirada: TiradaGuardada) {
-        if (ocupado || tirada.pool.isEmpty()) return
+    fun lanzarGuardada(tirada: TiradaGuardada): Boolean {
+        if (ocupado || tirada.pool.isEmpty()) return false
         cargar(tirada.sistemaId, tirada.pool, tirada.parametros)
         etiquetaPendiente = tirada.nombre   // en Discord se lee "Espada larga: Éxito · 19"
         lanzar()
+        return true
     }
 
     // --- DISCORD ---

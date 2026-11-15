@@ -131,6 +131,7 @@ import com.rolesencia.diceroller.ui.viewmodel.AvisoDiscord
 import com.rolesencia.diceroller.ui.viewmodel.avisoDiscord
 import com.rolesencia.diceroller.ui.viewmodel.DiceRollerUiState
 import com.rolesencia.diceroller.ui.viewmodel.DiceRollerViewModel
+import com.rolesencia.diceroller.ui.viewmodel.mesaOcupada
 
 /**
  * Pantalla única, a pantalla completa: la mesa 3D ocupa todo y la interfaz flota encima.
@@ -150,7 +151,10 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
     var mostrarCreador by remember { mutableStateOf(false) }
     var skinEnEdicion by remember { mutableStateOf<SkinDado?>(null) }
     var abrirSolapa by remember { mutableIntStateOf(0) }
-    val ocupado = state.estaRodando || state.preparando
+    // La mesa ocupada (rodando, pre-simulando o sacando la foto) bloquea toda la interfaz salvo tocar la mesa.
+    val ocupado = state.mesaOcupada
+    // Sólo los dados rodando: el rótulo "Rodando…" y los valores del carrusel no deben depender de la foto.
+    val rodando = state.estaRodando || state.preparando
     val torre = remember(state.modeloTorre, state.mesa) { state.modeloTorre?.let { ModelosTorre.construir(it, state.mesa) } }
     val vista = LocalView.current
 
@@ -222,7 +226,12 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
     val areaUtil = with(densidad) { PaddingValues(top = altoSuperior.toDp(), bottom = altoInferior.toDp()) }
 
     // Mientras ruedan los dados la interfaz se aparta: lo único que importa es la tirada.
-    val opacidadControles by animateFloatAsState(if (ocupado) 0.25f else 1f, tween(350), label = "controles")
+    // Se apartan despacio y vuelven rápido (150 ms) para que no parezca un parpadeo.
+    val opacidadControles by animateFloatAsState(
+        if (ocupado) 0.4f else 1f, tween(if (ocupado) 350 else 150), label = "controles"
+    )
+    // Un aviso con "Deshacer" no puede quedar tocable en medio de un rodaje: el toque se perdería.
+    LaunchedEffect(ocupado) { if (ocupado) avisos.currentSnackbarData?.dismiss() }
 
     // Ambiente donde se lanza: define los colores "Por tipo" y el acento de los resaltados.
     val ambiente = PaletasAmbiente.clave(state.modeloTorre, state.materialMesa == MaterialMesa.MADERA)
@@ -247,7 +256,7 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
             onAlturaEntrada = viewModel::actualizarAlturaEntrada,
             onMantenerDado = { id ->
                 val quitado = state.pool.firstOrNull { it.id == id }
-                if (quitado != null) {
+                if (quitado != null && !ocupado) {
                     viewModel.quitarDado(id)
                     avisarQuitado(quitado)
                 }
@@ -322,7 +331,8 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
                 pool = state.pool,
                 resultados = state.resultados,
                 destacados = state.veredicto?.dadosDestacados.orEmpty(),
-                estaRodando = ocupado,
+                estaRodando = rodando,
+                habilitado = !ocupado,
                 // Cambia también al terminar de cargar las preferencias: la fila se ordena con el pool real.
                 sistemaId = if (state.estaCargando) "" else state.sistema.id,
                 skinActual = state.skinActual,
@@ -381,7 +391,7 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
                 }
                 if (state.manoIzquierda) botonDados() else botonTirada()
                 BotonLanzar(
-                    ocupado = ocupado,
+                    ocupado = rodando,
                     habilitado = !ocupado && state.pool.isNotEmpty(),
                     conservar = state.parametros.conservar,
                     discordActivo = state.discord.activo,
@@ -555,8 +565,8 @@ private fun BarraSuperior(
             }
         }
         // El historial ya no está acá: vive en la fila de atajos, al alcance del pulgar.
-        IconButton(onClick = onAjustes) {
-            Icon(painterResource(R.drawable.ic_ajustes), contentDescription = "Ajustes", tint = Ivory)
+        IconButton(onClick = onAjustes, enabled = !ocupado) {
+            Icon(painterResource(R.drawable.ic_ajustes), contentDescription = "Ajustes", tint = if (ocupado) Ivory.copy(alpha = 0.4f) else Ivory)
         }
     }
 }

@@ -69,9 +69,9 @@ fun HojaHistorial(
     guardadas: List<TiradaGuardada>,
     notacionActual: String,
     habilitado: Boolean,
-    onRepetir: (EntradaHistorial) -> Unit,
+    onRepetir: (EntradaHistorial) -> Boolean,
     onBorrarHistorial: () -> Unit,
-    onLanzarGuardada: (TiradaGuardada) -> Unit,
+    onLanzarGuardada: (TiradaGuardada) -> Boolean,
     onGuardarActual: (String) -> Unit,
     onBorrarGuardada: (TiradaGuardada) -> Unit,
     onCerrar: () -> Unit,
@@ -106,7 +106,7 @@ fun HojaHistorial(
                 }
                 PestanaHistorial(
                     historial, habilitado, pendientesDiscord,
-                    onRepetir = { onRepetir(it); onCerrar() },
+                    onRepetir = { if (onRepetir(it)) onCerrar() },
                     onBorrar = { historialBorrado = historial; onBorrarHistorial() }
                 )
             }
@@ -119,7 +119,7 @@ fun HojaHistorial(
                 }
                 PestanaGuardadas(
                     guardadas, notacionActual, habilitado,
-                    onLanzar = { onLanzarGuardada(it); onCerrar() },
+                    onLanzar = { if (onLanzarGuardada(it)) onCerrar() },
                     onGuardar = onGuardarActual,
                     onBorrar = { guardadaBorrada = it; onBorrarGuardada(it) },
                     // Al escribir el nombre la hoja se abre entera: a media altura el teclado tapa el campo.

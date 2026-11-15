@@ -82,6 +82,8 @@ fun CarruselDados(
     resultados: List<ResultadoDado>,
     destacados: Set<Int>,
     estaRodando: Boolean,
+    /** Falso mientras la mesa está ocupada: ni sumar ni quitar dados. */
+    habilitado: Boolean,
     skinActual: SkinDado,
     onAgregar: (TipoDado) -> Unit,
     onQuitar: (TipoDado) -> Unit,
@@ -106,7 +108,7 @@ fun CarruselDados(
 
     LazyRow(
         // Mientras ruedan los dados la fila se aparta, como el resto de los controles.
-        modifier.fillMaxWidth().height(ALTO_FILA).alpha(if (estaRodando) 0.35f else 1f),
+        modifier.fillMaxWidth().height(ALTO_FILA).alpha(if (habilitado) 1f else 0.4f),
         state = estado,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(horizontal = 16.dp),
@@ -123,7 +125,7 @@ fun CarruselDados(
                 cantidad = enMesa.size,
                 resultados = valores,
                 destacados = destacados,
-                habilitado = !estaRodando,
+                habilitado = habilitado,
                 onAgregar = { onAgregar(tipo) },
                 onQuitar = { onQuitar(tipo) }
             )
