@@ -10,19 +10,44 @@ import java.io.ByteArrayOutputStream
  * caja termina siendo un color de la paleta (su promedio).
  */
 class PaletaGif private constructor(val colores: IntArray) {
-    // Para cada color de 15 bits, el índice del color más parecido de la paleta (se calcula al pedirlo).
-    private val cercano = ShortArray(32768) { -1 }
+    // Para cada color de 18 bits (6 por canal), el índice del color más parecido de la paleta y cuánto
+    // se le parece (distancia al cuadrado); se calculan al pedirlos.
+    private val cercano = ShortArray(262144) { -1 }
+    private val error = IntArray(262144)
 
-    fun indice(argb: Int): Int {
-        val clave = ((argb shr 9) and 0x7C00) or ((argb shr 6) and 0x3E0) or ((argb shr 3) and 0x1F)
+    /** Índice del color más parecido, sin tramado. */
+    fun indice(argb: Int): Int = buscar(claveDe((argb shr 16) and 0xFF, (argb shr 8) and 0xFF, argb and 0xFF))
+
+    /**
+     * Índice para el píxel ([x], [y]) con **tramado ordenado de Bayer 4×4**: donde la paleta no tiene un
+     * color parecido (los degradés del fondo), el color se corre un poco según la posición, y así los
+     * píxeles vecinos eligen entre dos tonos de la paleta en vez de formar una banda. Donde el color está
+     * en la paleta (las caras de los dados, el texto, el contorno) no se toca: sale tal cual. Es
+     * determinista por posición, así que un fondo quieto da los mismos índices en todos los cuadros y
+     * sigue sin pesar (los píxeles iguales van "transparentes").
+     */
+    fun indice(argb: Int, x: Int, y: Int): Int {
+        val r = (argb shr 16) and 0xFF
+        val g = (argb shr 8) and 0xFF
+        val b = argb and 0xFF
+        val clave = claveDe(r, g, b)
+        val directo = buscar(clave)
+        if (error[clave] <= UMBRAL_DE_TRAMADO) return directo
+        val corrimiento = (BAYER[(y and 3) * 4 + (x and 3)] * 2 + 1 - 16) * AMPLITUD / 32
+        return buscar(claveDe((r + corrimiento).coerceIn(0, 255), (g + corrimiento).coerceIn(0, 255), (b + corrimiento).coerceIn(0, 255)))
+    }
+
+    private fun claveDe(r: Int, g: Int, b: Int) = ((r shr 2) shl 12) or ((g shr 2) shl 6) or (b shr 2)
+
+    private fun buscar(clave: Int): Int {
         val guardado = cercano[clave].toInt()
         if (guardado >= 0) return guardado
-        // Se busca con el color representativo del grupo de 15 bits, no con el primero que llegó: así
+        // Se busca con el color representativo del grupo de 18 bits, no con el primero que llegó: así
         // el resultado no depende del orden de los píxeles ni de un empate en el borde del grupo.
-        fun ocho(cinco: Int) = (cinco shl 3) or (cinco shr 2)
-        val r = ocho((clave shr 10) and 0x1F)
-        val g = ocho((clave shr 5) and 0x1F)
-        val b = ocho(clave and 0x1F)
+        fun ocho(seis: Int) = (seis shl 2) or (seis shr 4)
+        val r = ocho((clave shr 12) and 0x3F)
+        val g = ocho((clave shr 6) and 0x3F)
+        val b = ocho(clave and 0x3F)
         var mejor = 0
         var distancia = Int.MAX_VALUE
         for (i in colores.indices) {
@@ -34,16 +59,32 @@ class PaletaGif private constructor(val colores: IntArray) {
             if (d < distancia) { distancia = d; mejor = i }
         }
         cercano[clave] = mejor.toShort()
+        error[clave] = distancia
         return mejor
     }
 
     companion object {
         const val MAXIMO = 255
+        private const val PESO_PRIORITARIO = 2
 
-        fun de(muestras: List<IntArray>, maximo: Int = MAXIMO): PaletaGif {
+        /** Distancia (al cuadrado) hasta la cual un color "ya está" en la paleta y no se trama. */
+        private const val UMBRAL_DE_TRAMADO = 3 * 6 * 6
+        /** Cuánto se corre el color, en niveles de 0 a 255, entre el primer y el último escalón del patrón. */
+        private const val AMPLITUD = 12
+        private val BAYER = intArrayOf(0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5)
+
+        /**
+         * @param prioritarias colores que tienen que quedar bien representados aunque ocupen pocos píxeles
+         * (los dados y su contorno, el texto): cada uno cuenta [PESO_PRIORITARIO] veces. Así la paleta se
+         * reparte a propósito: una parte para lo que importa y el resto para el fondo.
+         */
+        fun de(muestras: List<IntArray>, maximo: Int = MAXIMO, prioritarias: List<IntArray> = emptyList()): PaletaGif {
             val cuenta = IntArray(32768)
             for (m in muestras) for (p in m) {
                 cuenta[((p shr 9) and 0x7C00) or ((p shr 6) and 0x3E0) or ((p shr 3) and 0x1F)]++
+            }
+            for (m in prioritarias) for (p in m) {
+                cuenta[((p shr 9) and 0x7C00) or ((p shr 6) and 0x3E0) or ((p shr 3) and 0x1F)] += PESO_PRIORITARIO
             }
             val presentes = (0 until 32768).filter { cuenta[it] > 0 }
             if (presentes.isEmpty()) return PaletaGif(intArrayOf(0))
@@ -101,7 +142,9 @@ class PaletaGif private constructor(val colores: IntArray) {
  * iguales van como "transparentes": con la cámara quieta y los dados moviéndose, un cuadro pesa una
  * fracción de la imagen completa. La compresión es LZW, la que define el formato.
  */
-class CodificadorGif(private val ancho: Int, private val alto: Int, private val paleta: PaletaGif) {
+class CodificadorGif(
+    private val ancho: Int, private val alto: Int, private val paleta: PaletaGif, private val tramado: Boolean = true
+) {
     private val salida = ByteArrayOutputStream(256 * 1024)
     private var anterior: ByteArray? = null
 
@@ -123,7 +166,9 @@ class CodificadorGif(private val ancho: Int, private val alto: Int, private val 
     /** Agrega un cuadro ([pixeles] en ARGB, de [ancho] × [alto]) que dura [centesimas] de segundo. */
     fun agregar(pixeles: IntArray, centesimas: Int) {
         require(pixeles.size == ancho * alto)
-        val indices = ByteArray(pixeles.size) { paleta.indice(pixeles[it]).toByte() }
+        val indices = ByteArray(pixeles.size) {
+            (if (tramado) paleta.indice(pixeles[it], it % ancho, it / ancho) else paleta.indice(pixeles[it])).toByte()
+        }
         val previo = anterior
         var x0 = 0; var y0 = 0; var x1 = ancho - 1; var y1 = alto - 1
         var datos = indices

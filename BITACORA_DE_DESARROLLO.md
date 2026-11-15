@@ -1137,6 +1137,79 @@ de `Toast`.
 
 ---
 
+## Capítulo 26 · El GIF más nítido y a lo pixel art (Fase 3 del plan de testeos)
+
+**El pedido.** Al ver una tirada en Discord, el usuario notó que el contorno resaltado de los dados
+salía unas tres veces más grueso que en el teléfono y con **puntas triples** en las esquinas, y que los
+números de las caras claras salían grisáceos. Pidió más nitidez, pero con una condición: si cada mejora
+alarga la publicación (hoy 3,5 s hasta "enviada", 566 KB por GIF), se descarta. Y un criterio de **pixel
+art para los fondos**, porque el formato sólo tiene 256 colores.
+
+**La solución.** Cuatro cambios chicos, medidos uno por uno con la misma tirada.
+- **Contorno.** Los trazos de los dados usan unión y extremos **redondeados** (con el pico por defecto,
+  las caras triangulares del d8 y el d20 se superponían en cada vértice: las "puntas triples"). Además,
+  el ancho se escala con el ancho de la imagen respecto de una pantalla de 1080 px (`escalaTrazo`, nunca
+  más de 1 ni menos de 0,45): en pantalla no cambia nada; en el GIF de 400 px el resaltado pasó de 3 px
+  a 1,35 px.
+- **Tramado de Bayer 4×4** al cuantizar cada cuadro (`PaletaGif.indice(argb, x, y)`). Sólo se trama donde
+  la paleta no tiene un color parecido (los degradés); lo que ya está en la paleta (caras, texto,
+  contorno) sale liso. Como depende de la posición y no del cuadro, el fondo quieto da los mismos índices
+  y sigue sin pesar. La caché de "color más parecido" pasó de 15 a 18 bits para que el corrimiento del
+  tramado no se pierda en el redondeo.
+- **Fondo en escalones.** `EscenaTorre.escalones` (7 para el GIF, 0 en pantalla) dibuja el cielo, los
+  halos de las velas y la viñeta en tramos de color liso, con bordes limpios; el tramado suaviza sólo el
+  paso de un escalón al otro.
+- **Paleta repartida a propósito.** Además de los tres cuadros de muestra, se dibujan los dados solos
+  (con y sin resaltado) y sus píxeles cuentan el doble al armar la paleta: la cara azul oscura de un dado
+  ya no se come con los marrones de la madera.
+
+**Se descartó el dibujo a doble resolución (800 px reducido a 400 con filtro):** bordes y números un poco
+más suaves, y el archivo pesa 9 % menos, pero tarda 21 % más (unos 0,8 s de más en una tirada real) y la
+paleta pierde matices de los dados. El usuario dijo que el tiempo manda: queda como opción apagada
+(`supermuestreo = 2`).
+
+**Medición** (banco `BancoGif`, prueba instrumentada que compone la misma tirada inventada de 4 dados,
+2 resaltados, 20 cuadros, en el Realme `98f28f4a`; 4 corridas alternadas por variante; una tirada real
+tiene unos 34 cuadros, así que los tiempos reales son ~1,7 veces estos):
+
+| Variante | Tiempo | Peso |
+|---|---|---|
+| Antes (sólo el contorno fino) | 1927 ms | 372 KB |
+| + tramado y paleta repartida | 2057 ms (+7 %) | 382 KB |
+| + fondo en escalones (**queda**) | 2128 ms (+10 %) | 348 KB (−7 %) |
+| + doble resolución (descartado) | 2570 ms (+33 %) | 315 KB (−15 %) |
+
+Estimación sobre la tirada real: **unos 0,35 s más** de composición (de 3,5 s a unos 3,85 s hasta
+"enviada") y **un 7 % menos de bytes**. El tiempo real hasta "enviada" no se midió: requiere publicar en
+el canal de Discord del usuario.
+
+**Problemas y soluciones.**
+
+| Problema | Causa | Solución |
+|---|---|---|
+| Con el tramado, las caras oscuras de los dados salían con textura de rejilla | Amplitud de 16 niveles y umbral bajo: caras con degradé suave tramadas | Amplitud 12 y umbral de error mayor: las caras salen lisas y el tramado queda en el fondo |
+| La primera paleta repartida (dados ×8) estropeó la madera y el azul de los dados | Demasiado peso a los píxeles de dados dejó pocos colores para el piso | Peso ×2; el piso conserva sus tonos |
+| El log de `adb` mostraba una sola corrida | `logcat` colapsa líneas repetidas | Se limpia el log y se lee tras cada corrida |
+| Primeras mediciones con tiempos que saltaban 1,7 s → 3,4 s | Calor y carga del teléfono con corridas sueltas | Variantes alternadas, 4 corridas, y se compara la media |
+| `gradle` sin SDK en el worktree | `local.properties` no se versiona | Se copió (queda fuera del commit) |
+| Un test de "paleta repartida" daba lo mismo con y sin prioridad | El corte de mediana ya separa los colores muy distintos; la prioridad sólo se nota con colores cercanos y muy pocos lugares | El test usa un azul oscuro pegado a una rampa de marrones y una paleta de 3 |
+
+**Verificación.** 150 tests (3 nuevos en `CodificadorGifTest`: el tramado acerca el promedio de cada
+bloque al original y es determinista con repetición cada 4 filas; un color de la paleta no se trama; la
+prioridad acerca el color de los dados), todos en verde. Comparación de cuadros antes y después de la
+misma tirada, recortada con Pillow: el contorno es fino y continuo, sin picos; los degradés ya no hacen
+bandas sino escalones con borde tramado; los números salen igual de legibles (el d6 blanco de la
+tirada real queda por mirar en Discord). Cierres (`FATAL EXCEPTION`): 0. **No se probó** el envío real.
+
+**Lo que aprendimos.** Medir cada paso con variantes **alternadas** vale más que cualquier estimación:
+el teléfono se calienta y los tiempos de corridas sueltas engañan. Y en un formato con 256 colores, lo
+barato (tramado, escalones, repartir la paleta) rinde más que lo caro (más resolución).
+
+**De acá salió…** Mirar en Discord la tirada real con el d6 blanco. Idea: un cuadro por zona (dados /
+fondo) con paletas separadas, si hiciera falta más fidelidad sin más tiempo.
+
+---
+
 ## Patrones que se repitieron
 
 1. **Imitar lo que haría una persona.** Verter de a poco, golpear la torre, empujar un dado montado,

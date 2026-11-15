@@ -24,6 +24,15 @@ import com.rolesencia.diceroller.tirada.torre.ModeloTorre
  * mismo código que la dibuja en pantalla.
  */
 object AnimacionTirada {
+    /**
+     * Cada mejora del dibujo del GIF se puede apagar por separado: el banco de medición del teléfono
+     * (`BancoGif`) las prende y apaga para comparar peso y tiempo con la misma tirada.
+     */
+    internal class Ajustes(
+        val tramado: Boolean = true, val escalones: Int = 7, val paletaRepartida: Boolean = true, val supermuestreo: Int = 1
+    )
+    internal var ajustes = Ajustes()
+
     const val ANCHO = 400
     private const val CUADROS_POR_SEGUNDO = 12
     private const val CENTESIMAS = 100 / CUADROS_POR_SEGUNDO
@@ -49,23 +58,34 @@ object AnimacionTirada {
         val alto = altoFoto + TarjetaTirada.altoFranja(ANCHO)
         // Piezas propias: las de la pantalla guardan pinceles y matrices que se están usando en otro hilo.
         val pintor = PintorDados(SimbolosLegendarios(contexto))
-        val escena = modelo?.let { EscenaTorre(it) }
-        val imagen = ImageBitmap(ANCHO, alto)
+        val escena = modelo?.let { EscenaTorre(it).also { e -> e.escalones = ajustes.escalones } }
+        // Con supermuestreo se dibuja a k veces el tamaño y se reduce con filtro: bordes y números más suaves.
+        val k = ajustes.supermuestreo
+        val ancho = ANCHO * k
+        val altoMesa = altoFoto * k
+        val altoGrande = altoMesa + TarjetaTirada.altoFranja(ancho)
+        val imagen = ImageBitmap(ancho, altoGrande)
         val bitmap = imagen.asAndroidBitmap()
         val lienzoCompose = androidx.compose.ui.graphics.Canvas(imagen)
         val lienzo = android.graphics.Canvas(bitmap)
         val alcance = CanvasDrawScope()
         val pixeles = IntArray(ANCHO * alto)
+        val chico = if (k > 1) android.graphics.Bitmap.createBitmap(ANCHO, alto, android.graphics.Bitmap.Config.ARGB_8888) else bitmap
+        val lienzoChico = android.graphics.Canvas(chico)
+        val filtro = android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG)
 
+        var camaraFinal: Camara? = null
         fun dibujar(c: Cuadro): IntArray {
-            alcance.draw(Density(1f), LayoutDirection.Ltr, lienzoCompose, Size(ANCHO.toFloat(), altoFoto.toFloat())) {
+            alcance.draw(Density(1f), LayoutDirection.Ltr, lienzoCompose, Size(ancho.toFloat(), altoMesa.toFloat())) {
                 drawRect(Color(TarjetaTirada.AZUL_NOCHE))
                 // El resaltado de los dados que deciden aparece cuando la tirada terminó, como en pantalla.
-                dibujarMesa(mesa, material, escena, c.dados, if (c.t > 0f) destacados else emptySet(), pintor, acento, c.t, 0f, 0f, 0f, 0f)
+                val camara = dibujarMesa(mesa, material, escena, c.dados, if (c.t > 0f) destacados else emptySet(), pintor, acento, c.t, 0f, 0f, 0f, 0f)
+                if (c.conResultado) camaraFinal = camara
             }
-            TarjetaTirada.dibujarFirma(lienzo, ANCHO)
-            TarjetaTirada.dibujarFranja(lienzo, ANCHO, altoFoto, datos, c.conResultado)
-            bitmap.getPixels(pixeles, 0, ANCHO, 0, 0, ANCHO, alto)
+            TarjetaTirada.dibujarFirma(lienzo, ancho)
+            TarjetaTirada.dibujarFranja(lienzo, ancho, altoMesa, datos, c.conResultado)
+            if (k > 1) lienzoChico.drawBitmap(bitmap, android.graphics.Rect(0, 0, ancho, altoGrande), android.graphics.Rect(0, 0, ANCHO, alto), filtro)
+            chico.getPixels(pixeles, 0, ANCHO, 0, 0, ANCHO, alto)
             return pixeles
         }
 
@@ -85,7 +105,20 @@ object AnimacionTirada {
 
         // La paleta sale de tres cuadros representativos: el primero, la mitad de la bajada y el resultado.
         val muestras = listOf(cuadros.first(), cuadros[cuadros.size - 1 - CUADROS_BAJADA / 2], ultimo).map { dibujar(it).copyOf() }
-        val gif = CodificadorGif(ANCHO, alto, PaletaGif.de(muestras))
+        // Los dados ocupan pocos píxeles y son lo que importa: sus colores (con y sin contorno resaltado)
+        // se cuentan de más al armar la paleta, y el resto de los colores queda para el fondo.
+        val prioritarias = if (!ajustes.paletaRepartida) emptyList() else camaraFinal?.let { camara ->
+            listOf(destacados, finales.map { it.dado.id }.toSet()).map { resaltados ->
+                bitmap.eraseColor(0)
+                alcance.draw(Density(1f), LayoutDirection.Ltr, lienzoCompose, Size(ancho.toFloat(), altoMesa.toFloat())) {
+                    finales.forEach { pintor.dibujarDado(this, camara, it, it.dado.id in resaltados, acento) }
+                }
+                val grandes = IntArray(ancho * altoGrande)
+                bitmap.getPixels(grandes, 0, ancho, 0, 0, ancho, altoGrande)
+                grandes.filter { (it ushr 24) == 255 }.toIntArray()
+            }
+        } ?: emptyList()
+        val gif = CodificadorGif(ANCHO, alto, PaletaGif.de(muestras, prioritarias = prioritarias), ajustes.tramado)
         cuadros.forEach { gif.agregar(dibujar(it), it.centesimas) }
         return gif.terminar()
     }
