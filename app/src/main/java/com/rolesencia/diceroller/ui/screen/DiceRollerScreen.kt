@@ -104,6 +104,7 @@ import com.rolesencia.diceroller.ui.components.CarruselDados
 import com.rolesencia.diceroller.ui.components.HojaAjustes
 import com.rolesencia.diceroller.ui.components.HojaHistorial
 import com.rolesencia.diceroller.domain.historial.IndicioHistorial
+import com.rolesencia.diceroller.domain.historial.Avisos
 import com.rolesencia.diceroller.domain.historial.NombreGuardada
 import com.rolesencia.diceroller.ui.components.HojaParametros
 import com.rolesencia.diceroller.ui.components.SelectorSistema
@@ -194,7 +195,7 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
         alcance.launch {
             avisos.currentSnackbarData?.dismiss()
             val r = avisos.showSnackbar(
-                "Quitaste un ${quitado.tipo.etiqueta}", actionLabel = "Deshacer",
+                Avisos.quitado(quitado.tipo.etiqueta), actionLabel = "Deshacer",
                 duration = SnackbarDuration.Short
             )
             if (r == SnackbarResult.ActionPerformed) viewModel.restaurarDado(quitado)
@@ -348,8 +349,8 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
                         alcance.launch {
                             avisos.currentSnackbarData?.dismiss()
                             avisos.showSnackbar(
-                                "Para quitar un dado, mantenelo apretado (acá o en la mesa) o tocá su −",
-                                duration = SnackbarDuration.Long
+                                Avisos.CONSEJO_QUITAR,
+                                duration = SnackbarDuration.Short
                             )
                         }
                     }
@@ -432,7 +433,7 @@ fun DiceRollerScreen(viewModel: DiceRollerViewModel) {
             avisos,
             Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = with(densidad) { altoInferior.toDp() } + 8.dp)
+                .padding(bottom = with(densidad) { altoInferior.toDp() - 8.dp }.coerceAtLeast(0.dp))   // el SnackbarHost ya trae 12 dp de margen: pegado a los atajos, sin tapar la mesa
         )
 
         if (mostrarCreador) {

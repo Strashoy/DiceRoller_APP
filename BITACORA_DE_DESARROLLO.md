@@ -1150,6 +1150,52 @@ de `Toast`.
    sonido y sombreado se testean sin Android.
 5. **El algoritmo del pintor tiene un costo.** Ver capítulo 11.
 
+## Capítulo 26 · Avisos que no tapan y un guardado que se nota (N2, N3, N4)
+
+**El pedido.** Tres hallazgos de los videos de testeo que ni la Fase 1 ni la Fase 2 habían tocado:
+el consejo "Para quitar un dado, mantenelo apretado… o tocá su –" se cortaba y tapaba la bandeja
+(N2, V1 0:18, V2 0:12 y 0:18); el aviso "Quitaste un d6" tapaba atajos y dados cada vez (N3,
+V1 0:24 y 1:30); y al guardar una tirada nadie veía si se había guardado: la persona preguntó
+"¿se guardó?" (N4, V1 1:22).
+
+**La solución.**
+- **N2:** el consejo pasó a "Mantené apretado un dado para quitarlo" (38 letras, una línea en
+  320 dp) y a duración corta.
+- **N3:** el aviso "Quitaste un d6 · Deshacer" ya era una línea y uno solo a la vez (se descarta el
+  anterior); lo que sobraba era el margen: flotaba 42 dp por encima de los atajos, encima de la
+  mesa. Se lo pegó a la franja de los atajos sin pisarla.
+- **N4:** al tocar "Guardar" se cierra el teclado, aparece "Guardada: <nombre>" dentro de la hoja
+  (los avisos de la pantalla quedan tapados por la hoja), la lista se desplaza hasta el ítem nuevo y
+  éste se resalta en verde 3,5 s. El aviso se anuncia a TalkBack (`liveRegion`).
+- Los textos y sus límites de largo viven en `Avisos.kt` (puro Kotlin), con 5 tests nuevos.
+
+**Problemas y soluciones.**
+
+| Problema | Causa | Solución |
+|---|---|---|
+| La app se cerró al abrir (1 `FATAL EXCEPTION`, dos veces) | Para pegar el aviso a los atajos resté 8 dp al margen medido; mientras la barra inferior aún no se medía (alto 0) el padding quedaba negativo | `coerceAtLeast(0.dp)`. Después: 0 cierres |
+| Compilación: `LocalFocusManager` sin resolver | Está en `ui.platform`, no en `ui.focus` | Importación corregida |
+| El worktree no compilaba ("SDK location not found") | `local.properties` no se versiona y el worktree no lo tiene | Copiarlo del repo principal |
+| Mi app murió "en frío" sin ningún cierre en el registro y Chrome quedó al frente | La sesión `fase-3` instaló su build en el mismo celular y reemplazó la mía | Reinstalar y repetir la prueba de corrido; recordar que dos sesiones no deben probar a la vez en el mismo teléfono |
+
+**Números reales (celular 98f28f4a, 320 dp de ancho).**
+- Aviso "Quitaste un d12": antes y=1631–1709 px con los atajos arriba en 1872 (hueco de 163 px,
+  42 dp); ahora y=1693–1771 (hueco de 101 px, 26 dp, que incluye el margen propio y la sombra). Cuatro
+  dados quitados seguidos con "−": un solo aviso visible, el último.
+- Guardar: teclado visible antes (`mInputShown=true`), cerrado después; "Guardada: 1d20 + 1d6"
+  visible y a los 3 s ya no; el contador de la pestaña pasó de 2 a 3; ítem a la vista sin desplazar a mano.
+- 152 tests, 0 fallas. Cierres en la prueba final: 0.
+
+**Lo que no se pudo verificar.** El consejo de quitar no volvió a aparecer en el teléfono (ya se mostró
+las 2 veces permitidas y ese contador vive en DataStore); su ancho se calculó, no se vio. Tampoco se
+repitió con una persona nueva (el criterio del plan: que no pregunte si se guardó).
+
+**Lo que aprendimos.** Un aviso que "tapa" puede no ser un problema de tamaño sino de margen: medir los
+límites con `uiautomator` mostró 42 dp de aire que no servían a nadie. Y una resta de márgenes tiene que
+acotarse siempre en cero: el primer cuadro de Compose se mide antes que las barras.
+
+**De acá salió…** Probar el consejo con una instalación limpia y con una persona nueva.
+
 ## Árbol de ideas: cómo una feature trajo la siguiente
 
 ```

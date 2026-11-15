@@ -12,6 +12,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import com.rolesencia.diceroller.domain.historial.Avisos
+import kotlinx.coroutines.delay
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import com.rolesencia.diceroller.domain.historial.NombreGuardada
@@ -222,6 +231,19 @@ private fun ColumnScope.PestanaGuardadas(
     // Viene prellenado con la notación: en el caso común basta tocar "Guardar".
     var campo by remember { mutableStateOf(TextFieldValue(nombreSugerido)) }
     val nombre = campo.text
+    // Confirmación del guardado (N4): en las pruebas la persona preguntó "¿se guardó?". Se cierra el
+    // teclado, se avisa con el nombre y se resalta el ítem nuevo unos segundos.
+    var recienGuardada by remember { mutableStateOf<String?>(null) }
+    val teclado = LocalSoftwareKeyboardController.current
+    val foco = LocalFocusManager.current
+    val lista = rememberLazyListState()
+    LaunchedEffect(recienGuardada, guardadas.size) {
+        val nombreNuevo = recienGuardada ?: return@LaunchedEffect
+        val pos = Avisos.posicionDe(guardadas, nombreNuevo)
+        if (pos >= 0) lista.animateScrollToItem(pos)
+        delay(3500)
+        recienGuardada = null
+    }
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
         Text("Guardar la mesa actual: $notacionActual", fontSize = 13.sp, color = Ivory.copy(alpha = 0.75f))
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -239,23 +261,43 @@ private fun ColumnScope.PestanaGuardadas(
                 }
             )
             FilledTonalButton(
-                onClick = { onGuardar(nombre); campo = TextFieldValue("") },
+                onClick = {
+                    onGuardar(nombre)
+                    recienGuardada = nombre.trim().take(NombreGuardada.MAX)
+                    campo = TextFieldValue("")
+                    foco.clearFocus()
+                    teclado?.hide()
+                },
                 enabled = nombre.isNotBlank(),
                 modifier = Modifier.heightIn(min = 56.dp)
             ) { Text("Guardar") }
         }
+    }
+    recienGuardada?.let { nuevo ->
+        Text(
+            Avisos.guardada(nuevo), fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            color = VerdeExito,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp)
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(12.dp))
+                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .semantics { liveRegion = LiveRegionMode.Polite }
+        )
     }
     if (guardadas.isEmpty()) {
         Vacio("Sin tiradas guardadas", "Guardá las que repetís siempre: el ataque de tu espada, una tirada de daño, la de iniciativa.")
         return
     }
     // weight(fill = false): con el teclado abierto la lista toma lo que sobra, no se corta.
-    LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false).heightIn(max = 440.dp)) {
+    LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false).heightIn(max = 440.dp), state = lista) {
         items(guardadas, key = { it.nombre }) { t ->
+            val nueva = recienGuardada?.equals(t.nombre, ignoreCase = true) == true
             Row(
                 Modifier
                     .fillMaxWidth()
                     .heightIn(min = 64.dp)
+                    .background(if (nueva) VerdeExito.copy(alpha = 0.18f) else Color.Transparent)
                     .clickable(enabled = habilitado) { onLanzar(t) }
                     .padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
