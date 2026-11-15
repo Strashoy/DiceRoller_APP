@@ -42,6 +42,74 @@ class CodificadorGifTest {
         assertArrayEquals(b, leido.cuadros[2])
     }
 
+    private fun gris(v: Int) = (0xFF shl 24) or (v shl 16) or (v shl 8) or v
+    private fun canal(argb: Int) = argb and 0xFF
+
+    /** Error medio entre el promedio de cada bloque de 4×4 de lo decodificado y el de lo pedido. */
+    private fun errorDeBloques(pedido: IntArray, leido: IntArray, ancho: Int, alto: Int): Double {
+        var suma = 0.0
+        var n = 0
+        for (by in 0 until alto / 4) for (bx in 0 until ancho / 4) {
+            var a = 0; var b = 0
+            for (y in 0 until 4) for (x in 0 until 4) {
+                val i = (by * 4 + y) * ancho + bx * 4 + x
+                a += canal(pedido[i]); b += canal(leido[i])
+            }
+            suma += Math.abs(a - b) / 16.0; n++
+        }
+        return suma / n
+    }
+
+    @Test fun el_tramado_reparte_los_tonos_que_la_paleta_no_tiene() {
+        // Un degradé de grises con una paleta de sólo 16 tonos: sin tramado, bandas; con tramado de
+        // Bayer, los píxeles vecinos alternan entre dos tonos y el promedio de cada bloque se acerca al original.
+        val ancho = 128
+        val alto = 16
+        val degrade = IntArray(ancho * alto) { gris(8 + (it % ancho) * 230 / ancho) }
+        val tonos = List(16) { gris(it * 17) }
+        val paleta = PaletaGif.de(listOf(tonos.toIntArray()), maximo = 16)
+        fun leer(tramado: Boolean): IntArray {
+            val c = CodificadorGif(ancho, alto, paleta, tramado)
+            c.agregar(degrade, 10)
+            return GifDePrueba.leer(c.terminar()).cuadros[0]
+        }
+        val sin = errorDeBloques(degrade, leer(false), ancho, alto)
+        val con = errorDeBloques(degrade, leer(true), ancho, alto)
+        assertTrue("con tramado el promedio se acerca más ($con contra $sin)", con < sin * 0.85)
+        // El patrón es de 4×4 y depende sólo de la posición: dos corridas dan lo mismo, y 4 filas más abajo se repite.
+        assertArrayEquals(leer(true), leer(true))
+        val l = leer(true)
+        for (x in 0 until ancho) assertEquals(l[x], l[4 * ancho + x])
+    }
+
+    @Test fun un_color_de_la_paleta_no_se_trama() {
+        // Lo que ya está en la paleta (caras de los dados, texto, contorno) sale liso, sin ruido.
+        val ancho = 32
+        val alto = 32
+        val colores = List(10) { color(it * 3, 31 - it * 2, it) }
+        val liso = IntArray(ancho * alto) { colores[(it / ancho / 8 + (it % ancho) / 16) % colores.size] }
+        val leido = GifDePrueba.leer(codificar(ancho, alto, listOf(liso), listOf(10)))
+        assertArrayEquals(liso, leido.cuadros[0])
+    }
+
+    @Test fun la_paleta_repartida_guarda_lugar_para_lo_que_ocupa_pocos_pixeles() {
+        // Un fondo de madera (una rampa de marrones, casi todo el cuadro) y unos pocos píxeles de un azul
+        // oscuro, el de la cara de un dado, muy cerca de esos marrones. Con muy pocos lugares en la
+        // paleta, el azul se come con la rampa; con prioridad se queda con un lugar más cerca de su tono.
+        fun marron(i: Int) = (0xFF shl 24) or ((40 + i) shl 16) or ((24 + i / 2) shl 8) or (16 + i / 4)
+        val fondo = IntArray(200 * 100) { marron((it % 200) / 3) }
+        val azul = (0xFF shl 24) or (30 shl 16) or (34 shl 8) or 64
+        val dado = IntArray(500) { azul }
+        fun distancia(a: Int, b: Int): Int {
+            fun d(s: Int) = ((a shr s) and 0xFF) - ((b shr s) and 0xFF)
+            return d(16) * d(16) + d(8) * d(8) + d(0) * d(0)
+        }
+        fun error(paleta: PaletaGif) = distancia(azul, paleta.colores[paleta.indice(azul)])
+        val sin = PaletaGif.de(listOf(fondo, dado), maximo = 3)
+        val con = PaletaGif.de(listOf(fondo, dado), maximo = 3, prioritarias = listOf(dado))
+        assertTrue("sin=${error(sin)} con=${error(con)}", error(con) < error(sin) * 0.7)
+    }
+
     @Test fun un_cuadro_ruidoso_llena_la_tabla_y_sigue_bien() {
         // Ruido con muchos colores: obliga a pasar por códigos de 9 a 12 bits y a vaciar la tabla.
         val ancho = 160

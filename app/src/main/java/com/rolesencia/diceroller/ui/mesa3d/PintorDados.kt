@@ -10,6 +10,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -38,6 +40,8 @@ import kotlin.math.sin
  * una gema translúcida), con el estilo, la iluminación y la tipografía de la skin.
  */
 class PintorDados(private val simbolos: SimbolosLegendarios? = null) {
+    private companion object { const val ANCHO_DE_REFERENCIA = 1080f }
+
     private val pintura = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER; textSize = 70f }
     private val pinturaImagen = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val matriz = Matrix()
@@ -58,6 +62,16 @@ class PintorDados(private val simbolos: SimbolosLegendarios? = null) {
         scope.drawOval(Color.Black.copy(alpha = alfa), topLeft = Offset(centro.x - r, centro.y - r * aplastado), size = Size(2 * r, 2f * aplastado * r))
     }
 
+    /**
+     * Los anchos de línea están pensados para una pantalla de teléfono (~1080 px o más). En una imagen
+     * más chica (el GIF de 400 px) pesarían tres veces más en proporción: se achican con el ancho,
+     * sin pasar de 1 (en pantalla no cambia nada) ni bajar de 0,45.
+     */
+    internal fun escalaTrazo(anchoImagen: Float): Float = (anchoImagen / ANCHO_DE_REFERENCIA).coerceIn(0.45f, 1f)
+
+    /** Trazo de unión y extremos redondeados: en las esquinas agudas el pico se come el contorno vecino ("puntas triples"). */
+    private fun trazo(ancho: Float) = Stroke(width = ancho, join = StrokeJoin.Round, cap = StrokeCap.Round)
+
     fun dibujarDado(scope: DrawScope, camara: Camara, dado: DadoVisual, destacado: Boolean, acento: Color = Color(0xFFFFD700)) {
         val tipo = dado.dado.tipo
         val legendario = tipo == TipoDado.LEGENDARIO
@@ -69,7 +83,8 @@ class PintorDados(private val simbolos: SimbolosLegendarios? = null) {
         val pantalla = mundo.map { camara.proyectar(it) }
         val especial = dado.dado.rol == RolDado.ESPECIAL
         val borde = if (destacado) acento else colorBorde(dado.dado).copy(alpha = if (especial) 1f else 0.85f)
-        val anchoBorde = if (destacado) 3f else if (especial) 2.4f else 1.3f
+        val e = escalaTrazo(scope.size.width)
+        val anchoBorde = (if (destacado) 3f else if (especial) 2.4f else 1.3f) * e
 
         fun camino(cara: Cara) = Path().apply {
             cara.vertices.forEachIndexed { k, v -> if (k == 0) moveTo(pantalla[v].x, pantalla[v].y) else lineTo(pantalla[v].x, pantalla[v].y) }
@@ -86,7 +101,7 @@ class PintorDados(private val simbolos: SimbolosLegendarios? = null) {
                 if (((camara.ojo - centro) dot normal) > 0f) return@forEachIndexed
                 val path = camino(cara)
                 scope.drawPath(path, lerp(Color.Black, Color(colorBase(i, cara)), 0.4f).copy(alpha = 0.6f))
-                scope.drawPath(path, borde.copy(alpha = 0.3f), style = Stroke(width = 1f))
+                scope.drawPath(path, borde.copy(alpha = 0.3f), style = trazo(1f * e))
             }
         }
 
@@ -168,10 +183,11 @@ class PintorDados(private val simbolos: SimbolosLegendarios? = null) {
         // 3. Aristas (en el brillo nocturno, con resplandor).
         if (estilo == EstiloSkin.BRILLO_NOCTURNO && !destacado) {
             val resplandor = Color(skin.color2Para(tipo))
-            scope.drawPath(path, resplandor.copy(alpha = 0.35f), style = Stroke(width = 5f))
-            scope.drawPath(path, resplandor, style = Stroke(width = 1.4f))
+            val e = escalaTrazo(scope.size.width)
+            scope.drawPath(path, resplandor.copy(alpha = 0.35f), style = trazo(5f * e))
+            scope.drawPath(path, resplandor, style = trazo(1.4f * e))
         } else {
-            scope.drawPath(path, borde, style = Stroke(width = anchoBorde))
+            scope.drawPath(path, borde, style = trazo(anchoBorde))
         }
 
         // 4. Números o símbolos.

@@ -96,6 +96,27 @@ private class Iluminacion(private val amb: Ambiente) {
  */
 class EscenaTorre(val modelo: ModeloTorre) {
 
+    /**
+     * Si es mayor que cero, los degradés del fondo (cielo, halos de las velas, viñeta) se dibujan en
+     * tantos escalones de color liso, como en el pixel art. Lo usa el GIF, que sólo tiene 256 colores;
+     * en pantalla queda en 0 y los degradés son continuos.
+     */
+    var escalones = 0
+
+    /** Paradas de un degradé en [escalones] tramos lisos (o las dos de siempre si no hay escalones). */
+    private fun paradas(colores: List<Color>): Array<Pair<Float, Color>> {
+        if (escalones <= 0) return Array(colores.size) { it / (colores.size - 1f) to colores[it] }
+        val n = escalones
+        fun en(t: Float): Color {
+            val x = t * (colores.size - 1)
+            val i = x.toInt().coerceAtMost(colores.size - 2)
+            return lerp(colores[i], colores[i + 1], x - i)
+        }
+        return Array(n * 2) { k -> val tramo = k / 2; (if (k % 2 == 0) tramo / n.toFloat() else (tramo + 1) / n.toFloat()) to en((tramo + 0.5f) / n) }
+    }
+    private fun radial(colores: List<Color>, centro: Offset, radio: Float) =
+        Brush.radialGradient(*paradas(colores), center = centro, radius = radio)
+
     private val teselas = ArrayList<Tesela>()
     private val contornos = ArrayList<Contorno>()
     private val adornos = ArrayList<Adorno>()
@@ -389,11 +410,11 @@ class EscenaTorre(val modelo: ModeloTorre) {
     /** Fondo con su degradado y resplandores, y el piso iluminado (va debajo de todo). */
     fun dibujarFondoYPiso(scope: DrawScope, camara: Camara) = with(scope) {
         val amb = modelo.ambiente
-        drawRect(Brush.verticalGradient(listOf(Color(amb.fondoArriba), Color(amb.fondoAbajo))))
+        drawRect(Brush.verticalGradient(*paradas(listOf(Color(amb.fondoArriba), Color(amb.fondoAbajo)))))
         for (r in amb.resplandores) {
             val c = Offset(size.width * r.x, size.height * r.y)
             val radio = r.radio * max(size.width, size.height)
-            drawCircle(Brush.radialGradient(listOf(Color(r.color), Color.Transparent), c, radio), radio, c)
+            drawCircle(radial(listOf(Color(r.color), Color.Transparent), c, radio), radio, c)
         }
         for (t in piso) dibujarTesela(t, camara.let { cam -> t.esquinas.map { cam.proyectar(it) } }, camara)
     }
@@ -402,9 +423,9 @@ class EscenaTorre(val modelo: ModeloTorre) {
     fun dibujarVineta(scope: DrawScope, intensidad: Float) = with(scope) {
         if (intensidad <= 0f) return@with
         drawRect(
-            Brush.radialGradient(
+            radial(
                 listOf(Color.Transparent, Color.Black.copy(alpha = 0.5f * intensidad)),
-                center = Offset(size.width / 2f, size.height * 0.55f), radius = max(size.width, size.height) * 0.75f
+                Offset(size.width / 2f, size.height * 0.55f), max(size.width, size.height) * 0.75f
             )
         )
     }
@@ -476,7 +497,7 @@ class EscenaTorre(val modelo: ModeloTorre) {
     private fun DrawScope.dibujarLlama(camara: Camara, p: Vec3, color: Color) {
         val c = camara.proyectar(p)
         val halo = camara.tamanoEnPantalla(p, 2.6f)
-        drawCircle(Brush.radialGradient(listOf(color.copy(alpha = 0.55f), Color.Transparent), c, halo), halo, c)
+        drawCircle(radial(listOf(color.copy(alpha = 0.55f), Color.Transparent), c, halo), halo, c)
         val alto = camara.tamanoEnPantalla(p, 0.75f)
         val ancho = camara.tamanoEnPantalla(p, 0.28f)
         fun lagrima(escala: Float) = Path().apply {
