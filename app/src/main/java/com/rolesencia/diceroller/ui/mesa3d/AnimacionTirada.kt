@@ -29,7 +29,7 @@ object AnimacionTirada {
      * (`BancoGif`) las prende y apaga para comparar peso y tiempo con la misma tirada.
      */
     internal class Ajustes(
-        val tramado: Boolean = true, val escalones: Int = 7, val paletaRepartida: Boolean = true, val supermuestreo: Int = 1
+        val tramado: Boolean = true, val escalones: Int = 0, val paletaRepartida: Boolean = true, val supermuestreo: Int = 1
     )
     internal var ajustes = Ajustes()
 

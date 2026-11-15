@@ -1156,7 +1156,7 @@ art para los fondos**, porque el formato sólo tiene 256 colores.
   contorno) sale liso. Como depende de la posición y no del cuadro, el fondo quieto da los mismos índices
   y sigue sin pesar. La caché de "color más parecido" pasó de 15 a 18 bits para que el corrimiento del
   tramado no se pierda en el redondeo.
-- **Fondo en escalones.** `EscenaTorre.escalones` (7 para el GIF, 0 en pantalla) dibuja el cielo, los
+- **Fondo en escalones (queda apagado: ver abajo).** `EscenaTorre.escalones` (probado con 7; hoy 0 en el GIF y en pantalla) dibuja el cielo, los
   halos de las velas y la viñeta en tramos de color liso, con bordes limpios; el tramado suaviza sólo el
   paso de un escalón al otro.
 - **Paleta repartida a propósito.** Además de los tres cuadros de muestra, se dibujan los dados solos
@@ -1168,6 +1168,11 @@ más suaves, y el archivo pesa 9 % menos, pero tarda 21 % más (unos 0,8 s de m�
 paleta pierde matices de los dados. El usuario dijo que el tiempo manda: queda como opción apagada
 (`supermuestreo = 2`).
 
+**Los escalones no gustaron.** Al verlos en Discord, el usuario dijo que el fondo quedó "incluso peor": los
+7 escalones se leen como anillos concéntricos oscuros alrededor de la torre. Se apagaron. El tramado solo
+(sin escalones) ya elimina los anillos violáceos que la paleta de 255 colores dejaba en los halos y se ve
+más parejo; el criterio de pixel art queda cubierto por el tramado de Bayer, no por el escalonado.
+
 **Medición** (banco `BancoGif`, prueba instrumentada que compone la misma tirada inventada de 4 dados,
 2 resaltados, 20 cuadros, en el Realme `98f28f4a`; 4 corridas alternadas por variante; una tirada real
 tiene unos 34 cuadros, así que los tiempos reales son ~1,7 veces estos):
@@ -1175,12 +1180,12 @@ tiene unos 34 cuadros, así que los tiempos reales son ~1,7 veces estos):
 | Variante | Tiempo | Peso |
 |---|---|---|
 | Antes (sólo el contorno fino) | 1927 ms | 372 KB |
-| + tramado y paleta repartida | 2057 ms (+7 %) | 382 KB |
-| + fondo en escalones (**queda**) | 2128 ms (+10 %) | 348 KB (−7 %) |
+| + tramado y paleta repartida (**queda**) | 2057 ms (+7 %) | 382 KB |
+| + fondo en escalones (probado, **apagado**) | 2128 ms (+10 %) | 348 KB (−7 %) |
 | + doble resolución (descartado) | 2570 ms (+33 %) | 315 KB (−15 %) |
 
-Estimación sobre la tirada real: **unos 0,35 s más** de composición (de 3,5 s a unos 3,85 s hasta
-"enviada") y **un 7 % menos de bytes**. El tiempo real hasta "enviada" no se midió: requiere publicar en
+Estimación sobre la tirada real, con lo que queda (tramado y paleta): **unos 0,25 s más** de composición
+(de 3,5 s a unos 3,75 s hasta "enviada") y un 3 % más de bytes. El tiempo real hasta "enviada" no se midió: requiere publicar en
 el canal de Discord del usuario.
 
 **Problemas y soluciones.**
